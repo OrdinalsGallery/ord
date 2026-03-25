@@ -145,7 +145,7 @@ class HybridOpusPlayer {
       };
 
       const decoder = new window.OpusStreamDecoder({
-        onDecode: ({left, right, samplesDecoded, sampleRate}) => {
+        onDecode: ({ left, right, samplesDecoded, sampleRate }) => {
           if (!this.decodedAudio.sampleRate) {
             this.decodedAudio.sampleRate = sampleRate;
             this.decodedAudio.channelData[0] = [];
@@ -179,7 +179,7 @@ class HybridOpusPlayer {
     let pageCount = 0;
     while (offset < data.length - 27 && pageCount < 3) {
       if (data[offset] === 0x4F && data[offset + 1] === 0x67 &&
-          data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
+        data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
 
         const headerType = data[offset + 5];
         const segmentCount = data[offset + 26];
@@ -229,7 +229,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] !== 0x4F || data[offset + 1] !== 0x67 ||
-          data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
+        data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
         offset++;
         continue;
       }
@@ -311,7 +311,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] !== 0x4F || data[offset + 1] !== 0x67 ||
-          data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
+        data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
         offset++;
         continue;
       }
@@ -798,7 +798,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] !== 0x4F || data[offset + 1] !== 0x67 ||
-          data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
+        data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
         offset++;
         continue;
       }
@@ -884,10 +884,10 @@ class HybridOpusPlayer {
 
         const lowerComment = commentString.toLowerCase();
         if (lowerComment.includes('metadata_block_picture') ||
-            lowerComment.includes('cover') ||
-            lowerComment.includes('albumart') ||
-            lowerComment.includes('image') ||
-            lowerComment.includes('picture')) {
+          lowerComment.includes('cover') ||
+          lowerComment.includes('albumart') ||
+          lowerComment.includes('image') ||
+          lowerComment.includes('picture')) {
         } else {
           filteredComments.push(commentString);
         }
@@ -948,7 +948,8 @@ class HybridOpusPlayer {
         return this.cachedWavData;
       }
 
-      const opusBytes = new Uint8Array(opusData);
+      const cleanedData = this.stripOpusEmbeddedArtwork(opusData);
+      const opusBytes = new Uint8Array(cleanedData);
 
       this.decodedAudio = {
         channelData: [],
@@ -958,14 +959,7 @@ class HybridOpusPlayer {
 
       await this.wasmDecoder.ready;
 
-      const CHUNK_SIZE = 16384;
-      for (let i = 0; i < opusBytes.length; i += CHUNK_SIZE) {
-        const chunk = opusBytes.subarray(i, Math.min(i + CHUNK_SIZE, opusBytes.length));
-        this.wasmDecoder.decode(chunk);
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 200));
+      this.wasmDecoder.decode(opusBytes);
 
       if (!this.decodedAudio.sampleRate || this.decodedAudio.totalSamples === 0) {
         throw new Error('OpusStreamDecoder returned no audio data');
@@ -990,6 +984,121 @@ class HybridOpusPlayer {
     }
   }
 
+  stripOpusEmbeddedArtwork(opusData) {
+    const data = new Uint8Array(opusData);
+
+    if (data.length < 27 || data[0] !== 0x4F || data[1] !== 0x67 ||
+      data[2] !== 0x67 || data[3] !== 0x53) {
+      return opusData;
+    }
+
+    const outputPages = [];
+    let offset = 0;
+    let skippingOpusTags = false;
+    let serialNumber = 0;
+
+    while (offset < data.length - 27) {
+      if (data[offset] !== 0x4F || data[offset + 1] !== 0x67 ||
+        data[offset + 2] !== 0x67 || data[offset + 3] !== 0x53) {
+        offset++;
+        continue;
+      }
+
+      const headerTypeFlags = data[offset + 5];
+      const isContinuation = (headerTypeFlags & 0x01) !== 0;
+      const segmentCount = data[offset + 26];
+
+      if (offset + 27 + segmentCount > data.length) break;
+
+      let pageDataSize = 0;
+      for (let i = 0; i < segmentCount; i++) {
+        pageDataSize += data[offset + 27 + i];
+      }
+
+      const pageHeaderSize = 27 + segmentCount;
+      const totalPageSize = pageHeaderSize + pageDataSize;
+
+      if (offset + totalPageSize > data.length) break;
+
+      const isOpusTags = !isContinuation && pageDataSize >= 8 &&
+        data[offset + pageHeaderSize] === 0x4F &&
+        data[offset + pageHeaderSize + 1] === 0x70 &&
+        data[offset + pageHeaderSize + 2] === 0x75 &&
+        data[offset + pageHeaderSize + 3] === 0x73 &&
+        data[offset + pageHeaderSize + 4] === 0x54 &&
+        data[offset + pageHeaderSize + 5] === 0x61 &&
+        data[offset + pageHeaderSize + 6] === 0x67 &&
+        data[offset + pageHeaderSize + 7] === 0x73;
+
+      if (outputPages.length === 0) {
+        serialNumber = new DataView(data.buffer, data.byteOffset + offset + 14, 4).getUint32(0, true);
+        outputPages.push(data.slice(offset, offset + totalPageSize));
+      } else if (isOpusTags) {
+        outputPages.push(this.buildOpusTagsOggPage(serialNumber));
+        const lastSegmentSize = data[offset + 27 + segmentCount - 1];
+        skippingOpusTags = (lastSegmentSize === 255);
+      } else if (skippingOpusTags && isContinuation) {
+        const lastSegmentSize = data[offset + 27 + segmentCount - 1];
+        if (lastSegmentSize < 255) {
+          skippingOpusTags = false;
+        }
+      } else {
+        const pageCopy = data.slice(offset, offset + totalPageSize);
+        const view = new DataView(pageCopy.buffer, pageCopy.byteOffset);
+        view.setUint32(18, outputPages.length, true);
+        view.setUint32(22, 0, true);
+        const crc = this.calculateOggCrc32(pageCopy);
+        view.setUint32(22, crc, true);
+        outputPages.push(pageCopy);
+      }
+
+      offset += totalPageSize;
+    }
+
+    if (outputPages.length < 2) {
+      return opusData;
+    }
+
+    const totalSize = outputPages.reduce((sum, page) => sum + page.length, 0);
+    const result = new Uint8Array(totalSize);
+    let writeOffset = 0;
+    for (const page of outputPages) {
+      result.set(page, writeOffset);
+      writeOffset += page.length;
+    }
+
+    return result.buffer;
+  }
+
+  buildOpusTagsOggPage(serialNumber) {
+    const tagsContent = new Uint8Array([
+      0x4F, 0x70, 0x75, 0x73, 0x54, 0x61, 0x67, 0x73,
+      0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00
+    ]);
+
+    const page = new Uint8Array(27 + 1 + tagsContent.length);
+    page[0] = 0x4F; page[1] = 0x67; page[2] = 0x67; page[3] = 0x53;
+    page[4] = 0x00;
+    page[5] = 0x00;
+    for (let i = 6; i < 14; i++) page[i] = 0;
+    page[14] = serialNumber & 0xFF;
+    page[15] = (serialNumber >> 8) & 0xFF;
+    page[16] = (serialNumber >> 16) & 0xFF;
+    page[17] = (serialNumber >> 24) & 0xFF;
+    page[18] = 1; page[19] = 0; page[20] = 0; page[21] = 0;
+    page[22] = 0; page[23] = 0; page[24] = 0; page[25] = 0;
+    page[26] = 1;
+    page[27] = tagsContent.length;
+    page.set(tagsContent, 28);
+
+    const view = new DataView(page.buffer);
+    const crc = this.calculateOggCrc32(page);
+    view.setUint32(22, crc, true);
+
+    return page;
+  }
+
   preprocessOggFile(opusData) {
     const data = new Uint8Array(opusData);
     const cleanedPages = [];
@@ -999,7 +1108,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] === 0x4F && data[offset + 1] === 0x67 &&
-          data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
+        data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
 
         const headerType = data[offset + 5];
         const segmentCount = data[offset + 26];
@@ -1127,7 +1236,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27 && pageCount < 10) {
       if (data[offset] === 0x4F && data[offset + 1] === 0x67 &&
-          data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
+        data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
 
         const headerType = data[offset + 5];
         const segmentCount = data[offset + 26];
@@ -1220,7 +1329,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] === 0x4F && data[offset + 1] === 0x67 &&
-          data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
+        data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
 
         const headerType = data[offset + 5];
         const segmentCount = data[offset + 26];
@@ -1623,7 +1732,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] === 0x4F && data[offset + 1] === 0x67 &&
-          data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
+        data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
 
         const headerType = data[offset + 5];
         const segmentCount = data[offset + 26];
@@ -1694,8 +1803,8 @@ class HybridOpusPlayer {
   detectPngSignature(data) {
     for (let i = 0; i < data.length - 7; i++) {
       if (data[i] === 0x89 && data[i + 1] === 0x50 && data[i + 2] === 0x4E &&
-          data[i + 3] === 0x47 && data[i + 4] === 0x0D && data[i + 5] === 0x0A &&
-          data[i + 6] === 0x1A && data[i + 7] === 0x0A) {
+        data[i + 3] === 0x47 && data[i + 4] === 0x0D && data[i + 5] === 0x0A &&
+        data[i + 6] === 0x1A && data[i + 7] === 0x0A) {
         return true;
       }
     }
@@ -1742,7 +1851,7 @@ class HybridOpusPlayer {
 
     while (offset < data.length - 27) {
       if (data[offset] === 0x4F && data[offset + 1] === 0x67 &&
-          data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
+        data[offset + 2] === 0x67 && data[offset + 3] === 0x53) {
 
         const headerTypeFlags = data[offset + 5];
         const segmentCount = data[offset + 26];
