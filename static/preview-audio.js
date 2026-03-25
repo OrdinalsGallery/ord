@@ -958,7 +958,12 @@ class HybridOpusPlayer {
 
       await this.wasmDecoder.ready;
 
-      this.wasmDecoder.decode(opusBytes);
+      const CHUNK_SIZE = 16384;
+      for (let i = 0; i < opusBytes.length; i += CHUNK_SIZE) {
+        const chunk = opusBytes.subarray(i, Math.min(i + CHUNK_SIZE, opusBytes.length));
+        this.wasmDecoder.decode(chunk);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
 
       await new Promise(resolve => setTimeout(resolve, 200));
 
