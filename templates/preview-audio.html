@@ -28,7 +28,7 @@
     <script src="/static/preview-audio.js?v=2" type=module></script>
 %% }
   </head>
-  <body>
+  <body style="--artwork-url: url(/artwork/{{self.inscription_id}});">
     <div id="play-overlay">
       <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
         <circle cx="32" cy="32" r="30" fill="rgba(0,0,0,0.55)" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
@@ -36,7 +36,7 @@
       </svg>
     </div>
     <div class="preview-content">
-      <img id="artwork" src=/artwork/{{self.inscription_id}} alt="">
+      <div id="artwork"></div>
       <audio id="audio-player" controls>
         <source src=/content/{{self.inscription_id}} type="{{self.content_type}}">
       </audio>
