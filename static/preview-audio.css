@@ -1,4 +1,5 @@
 html {
+  background-color: #131516;
   height: 100%;
 }
 
@@ -8,11 +9,12 @@ body {
   display: flex;
   height: 100%;
   margin: 0;
-  padding: 12px 0 16px;
-  background: transparent;
+  padding: 6px 10px 10px;
+  background: #131516;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   position: relative;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 #play-overlay {
@@ -20,25 +22,39 @@ body {
 }
 
 .preview-content {
+  /* Match iframe width more closely; cap so very wide embeds don’t dwarf the UI */
+  --preview-stack-width: min(94%, min(100% - 20px, 440px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  /* Square iframe is taller than art+player; center the stack instead of leaving one big empty band */
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
   width: 100%;
   max-width: none;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 #artwork {
-  width: 90%;
-  height: 300px;
-  margin: 0 auto;
+  flex: 0 1 auto;
+  min-height: 0;
+  width: auto;
+  height: auto;
+  max-width: var(--preview-stack-width);
+  max-height: calc(100% - 76px);
+  margin: 0;
   display: block;
   object-fit: contain;
 }
 
 #audio-player {
-  width: 90%;
-  max-width: none;
+  flex: 0 0 auto;
+  width: var(--preview-stack-width);
+  max-width: 100%;
+  margin: 0;
+  align-self: center;
 }
 
 audio {
