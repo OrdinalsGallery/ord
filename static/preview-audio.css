@@ -22,13 +22,11 @@ body {
 }
 
 .preview-content {
-  /* Match iframe width more closely; cap so very wide embeds don’t dwarf the UI */
-  --preview-stack-width: min(94%, min(100% - 20px, 440px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Square iframe is taller than art+player; center the stack instead of leaving one big empty band */
-  justify-content: center;
+  /* Keep media anchored near the top to avoid large empty space above artwork. */
+  justify-content: flex-start;
   gap: 10px;
   height: 100%;
   width: 100%;
@@ -40,9 +38,9 @@ body {
 #artwork {
   flex: 0 1 auto;
   min-height: 0;
-  width: auto;
+  width: 94%;
   height: auto;
-  max-width: var(--preview-stack-width);
+  max-width: 440px;
   max-height: calc(100% - 76px);
   margin: 0;
   display: block;
@@ -51,8 +49,8 @@ body {
 
 #audio-player {
   flex: 0 0 auto;
-  width: var(--preview-stack-width);
-  max-width: 100%;
+  width: 94%;
+  max-width: 440px;
   margin: 0;
   align-self: center;
 }

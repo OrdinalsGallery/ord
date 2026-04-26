@@ -240,6 +240,7 @@ a.mythic {
 .inscription {
   display: flex;
   justify-content: center;
+  margin-top: 15px;
 }
 
 .inscription > *:nth-child(1), .inscription > *:nth-child(3) {
@@ -306,5 +307,9 @@ a.mythic {
 }
 
 h1:has(+ .subtitle) {
+  margin-bottom: 0;
+}
+
+h1:has(+ .inscription) {
   margin-bottom: 0;
 }
