@@ -3,6 +3,7 @@ use {
     accept_encoding::AcceptEncoding,
     accept_json::AcceptJson,
     error::{OptionExt, ServerError, ServerResult},
+    range_header::RangeHeader,
   },
   super::*,
   crate::templates::{
@@ -44,6 +45,7 @@ mod accept_json;
 mod error;
 pub mod query;
 mod r;
+mod range_header;
 mod server_config;
 
 const MEBIBYTE: usize = 1 << 20;
@@ -1581,9 +1583,15 @@ impl Server {
 
       if let Media::Iframe = media {
         return Ok(
-          r::content_response(inscription, accept_encoding, &server_config, true)?
-            .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
-            .into_response(),
+          r::content_response(
+            inscription,
+            accept_encoding,
+            &server_config,
+            true,
+            &RangeHeader(None),
+          )?
+          .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
+          .into_response(),
         );
       }
 
@@ -4855,6 +4863,7 @@ mod tests {
         AcceptEncoding::default(),
         &ServerConfig::default(),
         true,
+        &RangeHeader(None),
       )
       .unwrap(),
       None
@@ -4863,7 +4872,7 @@ mod tests {
 
   #[test]
   fn content_response_with_content() {
-    let (headers, body) = r::content_response(
+    let (_, headers, body) = r::content_response(
       Inscription {
         content_type: Some("text/plain".as_bytes().to_vec()),
         body: Some(vec![1, 2, 3]),
@@ -4872,6 +4881,7 @@ mod tests {
       AcceptEncoding::default(),
       &ServerConfig::default(),
       true,
+      &RangeHeader(None),
     )
     .unwrap()
     .unwrap();
@@ -4882,7 +4892,7 @@ mod tests {
 
   #[test]
   fn content_security_policy_no_origin() {
-    let (headers, _) = r::content_response(
+    let (_, headers, _) = r::content_response(
       Inscription {
         content_type: Some("text/plain".as_bytes().to_vec()),
         body: Some(vec![1, 2, 3]),
@@ -4891,6 +4901,7 @@ mod tests {
       AcceptEncoding::default(),
       &ServerConfig::default(),
       true,
+      &RangeHeader(None),
     )
     .unwrap()
     .unwrap();
@@ -4903,7 +4914,7 @@ mod tests {
 
   #[test]
   fn content_security_policy_with_origin() {
-    let (headers, _) = r::content_response(
+    let (_, headers, _) = r::content_response(
       Inscription {
         content_type: Some("text/plain".as_bytes().to_vec()),
         body: Some(vec![1, 2, 3]),
@@ -4915,6 +4926,7 @@ mod tests {
         ..default()
       },
       true,
+      &RangeHeader(None),
     )
     .unwrap()
     .unwrap();
@@ -5012,7 +5024,7 @@ mod tests {
 
   #[test]
   fn content_response_no_content_type() {
-    let (headers, body) = r::content_response(
+    let (_, headers, body) = r::content_response(
       Inscription {
         content_type: None,
         body: Some(Vec::new()),
@@ -5021,6 +5033,7 @@ mod tests {
       AcceptEncoding::default(),
       &ServerConfig::default(),
       true,
+      &RangeHeader(None),
     )
     .unwrap()
     .unwrap();
@@ -5031,7 +5044,7 @@ mod tests {
 
   #[test]
   fn content_response_bad_content_type() {
-    let (headers, body) = r::content_response(
+    let (_, headers, body) = r::content_response(
       Inscription {
         content_type: Some("\n".as_bytes().to_vec()),
         body: Some(Vec::new()),
@@ -5040,12 +5053,368 @@ mod tests {
       AcceptEncoding::default(),
       &ServerConfig::default(),
       true,
+      &RangeHeader(None),
     )
     .unwrap()
     .unwrap();
 
     assert_eq!(headers["content-type"], "application/octet-stream");
     assert!(body.is_empty());
+  }
+
+  #[test]
+  fn content_response_includes_accept_ranges_header() {
+    let (status, headers, _) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(None),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["accept-ranges"], "bytes");
+  }
+
+  #[test]
+  fn content_response_range_first_bytes() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-4".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(headers["content-range"], "bytes 0-4/10");
+    assert_eq!(body, vec![0, 1, 2, 3, 4]);
+  }
+
+  #[test]
+  fn content_response_range_middle() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=3-6".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(headers["content-range"], "bytes 3-6/10");
+    assert_eq!(body, vec![3, 4, 5, 6]);
+  }
+
+  #[test]
+  fn content_response_range_last_byte() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=9-9".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(headers["content-range"], "bytes 9-9/10");
+    assert_eq!(body, vec![9]);
+  }
+
+  #[test]
+  fn content_response_range_first_byte() {
+    let (status, _, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-0".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, vec![0]);
+  }
+
+  #[test]
+  fn content_response_range_open_ended() {
+    let (status, _, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=5-".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, vec![5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_range_suffix() {
+    let (status, _, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=-3".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, vec![7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_range_full_file() {
+    let (status, _, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-9".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_range_end_beyond_eof() {
+    let (status, _, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-99".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(body, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_range_start_beyond_eof() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=10-20".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(headers["accept-ranges"], "bytes");
+    assert_eq!(headers["content-range"], "bytes */10");
+    assert_eq!(headers["content-type"], "text/plain");
+    assert!(body.is_empty());
+  }
+
+  #[test]
+  fn content_response_multi_range_ignored() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-1,4-5".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["accept-ranges"], "bytes");
+    assert!(!headers.contains_key("content-range"));
+    assert_eq!(body, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_empty_range_ignored() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["accept-ranges"], "bytes");
+    assert!(!headers.contains_key("content-range"));
+    assert_eq!(body, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_unsupported_range_unit_ignored() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("items=0-1".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers["accept-ranges"], "bytes");
+    assert!(!headers.contains_key("content-range"));
+    assert_eq!(body, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_empty_body_range_not_satisfiable() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        body: Some(Vec::new()),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-0".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::RANGE_NOT_SATISFIABLE);
+    assert_eq!(headers["accept-ranges"], "bytes");
+    assert_eq!(headers["content-range"], "bytes */0");
+    assert!(body.is_empty());
+  }
+
+  #[test]
+  fn content_response_range_with_content_encoding_ignored() {
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        content_encoding: Some(b"br".to_vec()),
+        body: Some(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]),
+        ..default()
+      },
+      AcceptEncoding(Some("br".into())),
+      &ServerConfig::default(),
+      true,
+      &RangeHeader(Some("bytes=0-4".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(!headers.contains_key("accept-ranges"));
+    assert!(!headers.contains_key("content-range"));
+    assert_eq!(body, vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  }
+
+  #[test]
+  fn content_response_range_with_decompressed_content() {
+    use std::io::Write;
+
+    let mut compressed = Vec::new();
+
+    {
+      let mut compressor =
+        brotli::enc::writer::CompressorWriter::new(&mut compressed, BROTLI_BUFFER_SIZE, 11, 22);
+      compressor
+        .write_all(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+        .unwrap();
+    }
+
+    let (status, headers, body) = r::content_response(
+      Inscription {
+        content_type: Some("text/plain".as_bytes().to_vec()),
+        content_encoding: Some(b"br".to_vec()),
+        body: Some(compressed),
+        ..default()
+      },
+      AcceptEncoding::default(),
+      &ServerConfig {
+        decompress: true,
+        ..default()
+      },
+      true,
+      &RangeHeader(Some("bytes=0-4".into())),
+    )
+    .unwrap()
+    .unwrap();
+
+    assert_eq!(status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(headers["accept-ranges"], "bytes");
+    assert_eq!(headers["content-range"], "bytes 0-4/10");
+    assert_eq!(body, vec![0, 1, 2, 3, 4]);
   }
 
   #[test]

@@ -68,6 +68,7 @@ env_logger = "0.11.0"
 futures = "0.3.21"
 hex.workspace = true
 http-body-util = "0.1.2"
+http-range = "0.1"
 humantime = "2.1.0"
 hyper = { version = "1.5.2", features = ["client", "http2"] }
 hyper-util = { version = "0.1.10", features = ["client", "client-legacy", "http2", "tokio"] }
