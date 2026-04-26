@@ -29,14 +29,11 @@ body {
 }
 
 #artwork {
-  background-image: var(--artwork-url);
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
   width: 90%;
   height: 300px;
   margin: 0 auto;
   display: block;
+  object-fit: contain;
 }
 
 #audio-player {
@@ -78,11 +75,21 @@ audio::-webkit-media-controls-time-remaining-display {
 
 html.thumbnail body {
   background-color: #131516;
-  background-image: var(--artwork-url);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
   padding: 0;
+}
+
+html.thumbnail .preview-content {
+  gap: 0;
+  height: 100%;
+}
+
+html.thumbnail #artwork {
+  width: 100%;
+  height: 100%;
+}
+
+html.thumbnail #audio-player {
+  display: none;
 }
 
 html.thumbnail #play-overlay {
@@ -108,6 +115,3 @@ html.thumbnail #play-overlay svg {
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
 }
 
-html.thumbnail body > div:not(#play-overlay) {
-  display: none;
-}
