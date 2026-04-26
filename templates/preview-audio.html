@@ -35,9 +35,9 @@
         <polygon points="26,20 26,44 46,32" fill="rgba(255,255,255,0.9)"/>
       </svg>
     </div>
-    <div class="preview-content">
-      <div id="artwork"></div>
-      <audio id="audio-player" controls>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: none;">
+      <div id="artwork" style="background-image: url(/artwork/{{self.inscription_id}}); background-size: contain; background-repeat: no-repeat; background-position: center; width: 90%; height: 300px; margin: 0 auto; display: block;"></div>
+      <audio id="audio-player" controls style="width: 90%; max-width: none;">
         <source src=/content/{{self.inscription_id}} type="{{self.content_type}}">
       </audio>
     </div>
