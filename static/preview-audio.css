@@ -81,5 +81,5 @@ html.thumbnail #play-overlay svg {
 }
 
 html.thumbnail body > div:not(#play-overlay) {
-  display: none;
+  display: none !important;
 }

@@ -32,8 +32,8 @@ mod tests {
       "
         <h1><a href=/inscription/1{64}i1>Inscription 0</a> Gallery</h1>
         <div class=thumbnails>
-          <a href=/gallery/1{64}i1/0><iframe .* src=/preview/2{64}i2></iframe></a>
-          <a href=/gallery/1{64}i1/1><iframe .* src=/preview/3{64}i3></iframe></a>
+          <a href=/gallery/1{64}i1/0><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
+          <a href=/gallery/1{64}i1/1><iframe .* src=/preview/3{64}i3\\?thumb=1></iframe></a>
         </div>
         .*
         prev
@@ -57,8 +57,8 @@ mod tests {
       "
         <h1><a href=/inscription/1{64}i1>Inscription 0</a> Gallery</h1>
         <div class=thumbnails>
-          <a href=/gallery/1{64}i1/0><iframe .* src=/preview/2{64}i2></iframe></a>
-          <a href=/gallery/1{64}i1/1><iframe .* src=/preview/3{64}i3></iframe></a>
+          <a href=/gallery/1{64}i1/0><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
+          <a href=/gallery/1{64}i1/1><iframe .* src=/preview/3{64}i3\\?thumb=1></iframe></a>
         </div>
         .*
           <a class=prev href=/gallery/1{64}i1/page/1>prev</a>

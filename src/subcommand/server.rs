@@ -7100,7 +7100,7 @@ next
       format!("/gallery/{gallery_id}"),
       StatusCode::OK,
       format!(
-        ".*<title>Inscription \\d+ Gallery</title>.*<h1><a href=/inscription/{gallery_id}>Inscription \\d+</a> Gallery</h1>.*<div class=thumbnails>.*<a href=/gallery/{gallery_id}/0><iframe .* src=/preview/{item_id}></iframe></a>.*",
+        ".*<title>Inscription \\d+ Gallery</title>.*<h1><a href=/inscription/{gallery_id}>Inscription \\d+</a> Gallery</h1>.*<div class=thumbnails>.*<a href=/gallery/{gallery_id}/0><iframe .* src=/preview/{item_id}\\?thumb=1></iframe></a>.*",
       ),
     );
   }
