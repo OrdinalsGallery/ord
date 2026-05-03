@@ -215,6 +215,7 @@ pub(super) async fn content(
   server_config: Extension<Arc<ServerConfig>>,
   Path(inscription_id): Path<InscriptionId>,
   accept_encoding: AcceptEncoding,
+  range: RangeHeader,
 ) -> ServerResult {
   content_inner(
     &index,
@@ -222,6 +223,7 @@ pub(super) async fn content(
     &server_config,
     inscription_id,
     accept_encoding,
+    range,
     true,
   )
   .await
@@ -233,6 +235,7 @@ pub(super) async fn content_inner(
   server_config: &ServerConfig,
   inscription_id: InscriptionId,
   accept_encoding: AcceptEncoding,
+  range: RangeHeader,
   cache: bool,
 ) -> ServerResult {
   task::block_in_place(|| {
@@ -253,7 +256,7 @@ pub(super) async fn content_inner(
     }
 
     Ok(
-      content_response(inscription, accept_encoding, server_config, cache)?
+      content_response(inscription, accept_encoding, server_config, cache, &range)?
         .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
         .into_response(),
     )
@@ -265,7 +268,8 @@ pub(super) fn content_response(
   accept_encoding: AcceptEncoding,
   server_config: &ServerConfig,
   cache: bool,
-) -> ServerResult<Option<(HeaderMap, Vec<u8>)>> {
+  range: &RangeHeader,
+) -> ServerResult<Option<(StatusCode, HeaderMap, Vec<u8>)>> {
   let mut headers = HeaderMap::new();
 
   match &server_config.csp_origin {
@@ -307,9 +311,12 @@ pub(super) fn content_response(
       .unwrap_or(HeaderValue::from_static("application/octet-stream")),
   );
 
+  let mut serving_encoded = false;
+
   if let Some(content_encoding) = inscription.content_encoding() {
     if accept_encoding.is_acceptable(&content_encoding) {
       headers.insert(header::CONTENT_ENCODING, content_encoding);
+      serving_encoded = true;
     } else if server_config.decompress && content_encoding == BROTLI {
       let Some(body) = inscription.into_body() else {
         return Ok(None);
@@ -321,7 +328,12 @@ pub(super) fn content_response(
         .read_to_end(&mut decompressed)
         .map_err(|err| ServerError::Internal(err.into()))?;
 
-      return Ok(Some((headers, decompressed)));
+      return Ok(Some(content_response_body(
+        headers,
+        decompressed,
+        range,
+        true,
+      )?));
     } else {
       return Err(ServerError::NotAcceptable {
         accept_encoding,
@@ -334,7 +346,59 @@ pub(super) fn content_response(
     return Ok(None);
   };
 
-  Ok(Some((headers, body)))
+  Ok(Some(content_response_body(
+    headers,
+    body,
+    range,
+    !serving_encoded,
+  )?))
+}
+
+fn content_response_body(
+  mut headers: HeaderMap,
+  body: Vec<u8>,
+  range: &RangeHeader,
+  accept_ranges: bool,
+) -> ServerResult<(StatusCode, HeaderMap, Vec<u8>)> {
+  if !accept_ranges {
+    return Ok((StatusCode::OK, headers, body));
+  }
+
+  headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+
+  if let Some(range_str) = &range.0 {
+    if !range_str.starts_with("bytes=") {
+      return Ok((StatusCode::OK, headers, body));
+    }
+
+    match http_range::HttpRange::parse(range_str, body.len() as u64) {
+      Ok(ranges) if ranges.len() == 1 => {
+        let r = &ranges[0];
+        let start = r.start as usize;
+        let end = (r.start + r.length) as usize;
+        let content_range = format!("bytes {}-{}/{}", start, end - 1, body.len());
+        headers.insert(
+          header::CONTENT_RANGE,
+          HeaderValue::from_str(&content_range).unwrap(),
+        );
+        return Ok((
+          StatusCode::PARTIAL_CONTENT,
+          headers,
+          body[start..end].to_vec(),
+        ));
+      }
+      Ok(_) => return Ok((StatusCode::OK, headers, body)),
+      Err(_) => {
+        headers.insert(
+          header::CONTENT_RANGE,
+          HeaderValue::from_str(&format!("bytes */{}", body.len())).unwrap(),
+        );
+        return Ok((StatusCode::RANGE_NOT_SATISFIABLE, headers, vec![]));
+      }
+    }
+  }
+
+  Ok((StatusCode::OK, headers, body))
 }
 
 pub(super) async fn inscription(
@@ -540,6 +604,7 @@ pub(super) async fn sat_at_index_content(
   server_config: Extension<Arc<ServerConfig>>,
   Path((DeserializeFromStr(sat), inscription_index)): Path<(DeserializeFromStr<Sat>, isize)>,
   accept_encoding: AcceptEncoding,
+  range: RangeHeader,
 ) -> ServerResult {
   let inscription_id = task::block_in_place(|| {
     if !index.has_sat_index() {
@@ -557,6 +622,7 @@ pub(super) async fn sat_at_index_content(
     &server_config,
     inscription_id,
     accept_encoding,
+    range,
     inscription_index >= 0,
   )
   .await
@@ -606,6 +672,7 @@ pub(super) async fn undelegated_content(
   Extension(server_config): Extension<Arc<ServerConfig>>,
   Path(inscription_id): Path<InscriptionId>,
   accept_encoding: AcceptEncoding,
+  range: RangeHeader,
 ) -> ServerResult {
   task::block_in_place(|| {
     if settings.is_hidden(inscription_id) {
@@ -617,7 +684,7 @@ pub(super) async fn undelegated_content(
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
 
     Ok(
-      r::content_response(inscription, accept_encoding, &server_config, true)?
+      r::content_response(inscription, accept_encoding, &server_config, true, &range)?
         .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
         .into_response(),
     )

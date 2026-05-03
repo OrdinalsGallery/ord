@@ -41,7 +41,7 @@ impl Display for Iframe {
         write!(
           f,
           "<a href=/gallery/{}/{i}>\
-            <iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/{id}>\
+            <iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/{id}?thumb=1>\
             </iframe>\
           </a>",
           self.inscription_id,
@@ -58,7 +58,7 @@ impl Display for Iframe {
         write!(
           f,
           "<a href=/inscription/{}>\
-            <iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/{}>\
+            <iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/{}?thumb=1>\
             </iframe>\
           </a>",
           self.inscription_id, self.inscription_id,
@@ -78,7 +78,7 @@ mod tests {
       Iframe::item(inscription_id(1), 2, inscription_id(3))
         .0
         .to_string(),
-      "<a href=/gallery/1{64}i1/2><iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/3{64}i3></iframe></a>",
+      "<a href=/gallery/1{64}i1/2><iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/3{64}i3\\?thumb=1></iframe></a>",
     );
   }
 
@@ -94,7 +94,7 @@ mod tests {
   fn thumbnail() {
     assert_regex_match!(
       Iframe::thumbnail(inscription_id(1)).0.to_string(),
-      "<a href=/inscription/1{64}i1><iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/1{64}i1></iframe></a>",
+      "<a href=/inscription/1{64}i1><iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/1{64}i1\\?thumb=1></iframe></a>",
     );
   }
 }

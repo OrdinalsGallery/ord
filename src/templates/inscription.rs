@@ -29,6 +29,199 @@ impl PageContent for InscriptionHtml {
 }
 
 impl InscriptionHtml {
+  fn metadata_sections_from_values(
+    opus_metadata: Option<Value>,
+    metadata: Option<Value>,
+  ) -> Vec<(&'static str, Value)> {
+    let mut sections = Vec::new();
+
+    if let Some(opus_metadata) = opus_metadata {
+      sections.push(("opus metadata", opus_metadata));
+    }
+
+    if let Some(metadata) = metadata {
+      sections.push(("metadata", metadata));
+    }
+
+    sections
+  }
+
+  pub fn metadata_sections(&self) -> Vec<(&'static str, Value)> {
+    Self::metadata_sections_from_values(self.opus_metadata(), self.inscription.metadata())
+  }
+
+  pub fn opus_metadata(&self) -> Option<Value> {
+    use symphonia::core::{
+      formats::FormatOptions, io::MediaSourceStream, meta::MetadataOptions, probe::Hint,
+    };
+
+    if self.inscription.content_encoding().is_some() {
+      return None;
+    }
+
+    let content_type = self.inscription.content_type()?.to_ascii_lowercase();
+    let is_opus_ogg = content_type == "audio/opus"
+      || content_type.starts_with("audio/opus;")
+      || (content_type.contains("audio/ogg") && content_type.contains("opus"));
+
+    if !is_opus_ogg {
+      return None;
+    }
+
+    let body = self.inscription.body()?.to_vec();
+    let media_source = MediaSourceStream::new(Box::new(Cursor::new(body)), Default::default());
+    let mut hint = Hint::new();
+    hint.with_extension("ogg");
+
+    let mut probed = symphonia::default::get_probe()
+      .format(
+        &hint,
+        media_source,
+        &FormatOptions::default(),
+        &MetadataOptions::default(),
+      )
+      .ok()?;
+
+    let metadata_queue = probed.format.metadata();
+    let metadata = metadata_queue.current()?;
+    let tags = metadata
+      .tags()
+      .iter()
+      .filter_map(|tag| {
+        let key = tag.key.trim();
+
+        if key.is_empty() || Self::is_picture_tag(key) {
+          return None;
+        }
+
+        Some((key.to_string(), tag.value.to_string()))
+      })
+      .collect::<Vec<(String, String)>>();
+
+    Self::opus_metadata_from_tags(tags)
+  }
+
+  fn is_picture_tag(key: &str) -> bool {
+    let upper = key.to_ascii_uppercase();
+    upper == "METADATA_BLOCK_PICTURE" || upper.contains("PICTURE")
+  }
+
+  fn opus_metadata_from_tags(tags: Vec<(String, String)>) -> Option<Value> {
+    const COMMON_FIELDS: [&str; 18] = [
+      "title",
+      "artist",
+      "album",
+      "album artist",
+      "date",
+      "track number",
+      "genre",
+      "composer",
+      "copyright",
+      "description",
+      "producer",
+      "engineer",
+      "mixer",
+      "assistant engineer",
+      "songwriter",
+      "mastering",
+      "inscribing",
+      "technology",
+    ];
+
+    let mut grouped = BTreeMap::<String, Vec<String>>::new();
+
+    for (key, value) in tags {
+      if Self::is_picture_tag(&key) {
+        continue;
+      }
+
+      let normalized_key = Self::normalize_opus_tag_key(&key);
+      if normalized_key.is_empty() {
+        continue;
+      }
+
+      grouped.entry(normalized_key).or_default().push(value);
+    }
+
+    if grouped.is_empty() {
+      return None;
+    }
+
+    let mut map = Vec::new();
+
+    for key in COMMON_FIELDS {
+      if let Some(values) = grouped.remove(key) {
+        map.push((
+          Value::Text(key.into()),
+          Self::opus_tag_values_to_value(values),
+        ));
+      }
+    }
+
+    for (key, values) in grouped {
+      map.push((Value::Text(key), Self::opus_tag_values_to_value(values)));
+    }
+
+    Some(Value::Map(map))
+  }
+
+  fn opus_tag_values_to_value(values: Vec<String>) -> Value {
+    if values.len() == 1 {
+      return Value::Text(values.into_iter().next().unwrap_or_default());
+    }
+
+    Value::Array(values.into_iter().map(Value::Text).collect())
+  }
+
+  fn normalize_opus_tag_key(key: &str) -> String {
+    let mut expanded = String::new();
+    let mut previous_was_lowercase = false;
+
+    for c in key.trim().chars() {
+      if c.is_ascii_uppercase() && previous_was_lowercase {
+        expanded.push(' ');
+      }
+
+      if matches!(c, '_' | '-' | '.') {
+        expanded.push(' ');
+      } else {
+        expanded.push(c);
+      }
+
+      previous_was_lowercase = c.is_ascii_lowercase();
+    }
+
+    let normalized = expanded
+      .split_whitespace()
+      .map(|part| part.to_ascii_lowercase())
+      .collect::<Vec<String>>()
+      .join(" ");
+
+    let compact = normalized.replace(' ', "");
+
+    match compact.as_str() {
+      "title" => "title".into(),
+      "artist" => "artist".into(),
+      "album" => "album".into(),
+      "albumartist" => "album artist".into(),
+      "date" | "year" => "date".into(),
+      "track" | "tracknumber" => "track number".into(),
+      "genre" => "genre".into(),
+      "composer" => "composer".into(),
+      "copyright" => "copyright".into(),
+      "description" | "comment" => "description".into(),
+      "producer" => "producer".into(),
+      "engineer" => "engineer".into(),
+      "mixer" => "mixer".into(),
+      "assistantengineer" => "assistant engineer".into(),
+      "songwriter" | "lyricist" => "songwriter".into(),
+      "mastering" => "mastering".into(),
+      "inscribing" => "inscribing".into(),
+      "technology" => "technology".into(),
+      _ => normalized,
+    }
+  }
+
   pub fn burn_metadata(&self) -> Option<Value> {
     let script_pubkey = &self.output.as_ref()?.script_pubkey;
 
@@ -245,7 +438,7 @@ mod tests {
           <dt>parents</dt>
           <dd>
             <div class=thumbnails>
-              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2></iframe></a>
+              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
             </div>
             <div class=center>
               <a href=/parents/1{64}i1>all</a>
@@ -307,8 +500,8 @@ mod tests {
           <dt>children</dt>
           <dd>
             <div class=thumbnails>
-              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2></iframe></a>
-              <a href=/inscription/3{64}i3><iframe .* src=/preview/3{64}i3></iframe></a>
+              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
+              <a href=/inscription/3{64}i3><iframe .* src=/preview/3{64}i3\\?thumb=1></iframe></a>
             </div>
             <div class=center>
               <a href=/children/1{64}i1>all \\(2\\)</a>
@@ -370,7 +563,7 @@ mod tests {
           <dt>children</dt>
           <dd>
             <div class=thumbnails>
-              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2></iframe></a>
+              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
             </div>
             <div class=center>
               <a href=/children/1{64}i1>all \\(1\\)</a>
@@ -502,6 +695,110 @@ mod tests {
         </dl>
       "
       .unindent()
+    );
+  }
+
+  #[test]
+  fn opus_metadata_key_normalization_ordering_and_picture_filtering() {
+    let metadata = InscriptionHtml::opus_metadata_from_tags(vec![
+      ("METADATA_BLOCK_PICTURE".into(), "base64-data".into()),
+      ("ALBUM_ARTIST".into(), "Album Artist".into()),
+      ("TRACKNUMBER".into(), "3".into()),
+      ("Technology".into(), "DAW".into()),
+      ("CustomTag".into(), "custom value".into()),
+      ("TITLE".into(), "Song Title".into()),
+    ])
+    .unwrap();
+
+    assert_eq!(
+      metadata,
+      Value::Map(vec![
+        (
+          Value::Text("title".into()),
+          Value::Text("Song Title".into())
+        ),
+        (
+          Value::Text("album artist".into()),
+          Value::Text("Album Artist".into())
+        ),
+        (Value::Text("track number".into()), Value::Text("3".into())),
+        (Value::Text("technology".into()), Value::Text("DAW".into())),
+        (
+          Value::Text("custom tag".into()),
+          Value::Text("custom value".into())
+        ),
+      ])
+    );
+  }
+
+  #[test]
+  fn opus_metadata_extracts_tags_from_real_opus_file() {
+    let metadata = InscriptionHtml {
+      inscription: inscription(
+        "audio/ogg;codecs=opus",
+        include_bytes!("../../testdata/comingsoon.opus"),
+      ),
+      ..default()
+    }
+    .opus_metadata()
+    .unwrap();
+
+    let Value::Map(fields) = metadata else {
+      panic!("expected opus metadata map");
+    };
+
+    assert_eq!(text_field(&fields, "title"), Some("comingsoon"));
+    assert_eq!(text_field(&fields, "artist"), Some("Tatiana Moroz"));
+    assert_eq!(text_field(&fields, "album artist"), Some("Tatiana Moroz"));
+    assert_eq!(text_field(&fields, "track number"), Some("1"));
+    assert_eq!(text_field(&fields, "technology"), Some("Michael Evans"));
+    assert!(
+      !fields
+        .iter()
+        .any(|(key, _)| matches!(key, Value::Text(key) if key.contains("picture")))
+    );
+  }
+
+  fn text_field<'a>(fields: &'a [(Value, Value)], name: &str) -> Option<&'a str> {
+    fields.iter().find_map(|(key, value)| {
+      if matches!(key, Value::Text(key) if key == name) {
+        if let Value::Text(value) = value {
+          return Some(value.as_str());
+        }
+      }
+
+      None
+    })
+  }
+
+  #[test]
+  fn metadata_sections_display_opus_metadata_before_metadata() {
+    let sections = InscriptionHtml::metadata_sections_from_values(
+      Some(Value::Map(vec![(
+        Value::Text("title".into()),
+        Value::Text("opus".into()),
+      )])),
+      Some(Value::Map(vec![(
+        Value::Text("foo".into()),
+        Value::Text("bar".into()),
+      )])),
+    );
+
+    assert_eq!(
+      sections,
+      vec![
+        (
+          "opus metadata",
+          Value::Map(vec![(
+            Value::Text("title".into()),
+            Value::Text("opus".into())
+          )]),
+        ),
+        (
+          "metadata",
+          Value::Map(vec![(Value::Text("foo".into()), Value::Text("bar".into()))]),
+        ),
+      ]
     );
   }
 }

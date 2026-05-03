@@ -16,6 +16,10 @@ rust-version.workspace = true
 copyright = "The Ord Maintainers"
 maintainer = "The Ord Maintainers"
 
+[build-dependencies]
+reqwest = { version = "0.12.0", features = ["blocking"] }
+sha2 = "0.10"
+
 [workspace]
 members = [".", "crates/*"]
 
@@ -64,6 +68,7 @@ env_logger = "0.11.0"
 futures = "0.3.21"
 hex.workspace = true
 http-body-util = "0.1.2"
+http-range = "0.1"
 humantime = "2.1.0"
 hyper = { version = "1.5.2", features = ["client", "http2"] }
 hyper-util = { version = "0.1.10", features = ["client", "client-legacy", "http2", "tokio"] }
@@ -91,6 +96,7 @@ serde_with.workspace = true
 serde_yaml = "0.9.17"
 sha3 = "0.10.8"
 snafu = "0.9.0"
+symphonia = { version = "0.5.4", features = ["flac", "mp3", "vorbis", "wav", "ogg"] }
 sysinfo = "0.38.0"
 tempfile.workspace = true
 tokio = { version = "1.43.0", features = ["rt-multi-thread"] }

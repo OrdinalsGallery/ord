@@ -218,8 +218,8 @@ fn address_page_shows_aggregated_inscriptions() {
 <dl>.*
   <dt>inscriptions</dt>
   <dd class=thumbnails>
-    <a href=/inscription/[[:xdigit:]]{64}i\d><iframe .* src=/preview/[[:xdigit:]]{64}i\d></iframe></a>
-    <a href=/inscription/[[:xdigit:]]{64}i\d><iframe .* src=/preview/[[:xdigit:]]{64}i\d></iframe></a>
+    <a href=/inscription/[[:xdigit:]]{64}i\d><iframe .* src=/preview/[[:xdigit:]]{64}i\d\?thumb=1></iframe></a>
+    <a href=/inscription/[[:xdigit:]]{64}i\d><iframe .* src=/preview/[[:xdigit:]]{64}i\d\?thumb=1></iframe></a>
   </dd>.*"
     ,
   );
@@ -703,6 +703,139 @@ fn inscription_transactions_are_stored_with_transaction_index() {
     ord.request(format!("/tx/{coinbase}")).status(),
     StatusCode::NOT_FOUND,
   );
+}
+
+#[test]
+fn content_range_request_returns_206() {
+  let core = mockcore::spawn();
+  let ord = TestServer::spawn(&core);
+
+  create_wallet(&core, &ord);
+
+  let (inscription, _) = inscribe(&core, &ord);
+
+  ord.sync_server();
+
+  let response = reqwest::blocking::Client::new()
+    .get(ord.url().join(&format!("/content/{inscription}")).unwrap())
+    .header("range", "bytes=0-1")
+    .send()
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+  assert_eq!(response.headers()["accept-ranges"], "bytes");
+  assert_eq!(response.headers()["content-range"], "bytes 0-1/3");
+  assert_eq!(response.bytes().unwrap().as_ref(), b"FO");
+}
+
+#[test]
+fn content_no_range_has_accept_ranges_header() {
+  let core = mockcore::spawn();
+  let ord = TestServer::spawn(&core);
+
+  create_wallet(&core, &ord);
+
+  let (inscription, _) = inscribe(&core, &ord);
+
+  ord.sync_server();
+
+  let response = reqwest::blocking::Client::new()
+    .get(ord.url().join(&format!("/content/{inscription}")).unwrap())
+    .send()
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(response.headers()["accept-ranges"], "bytes");
+}
+
+#[test]
+fn content_range_beyond_eof_returns_416() {
+  let core = mockcore::spawn();
+  let ord = TestServer::spawn(&core);
+
+  create_wallet(&core, &ord);
+
+  let (inscription, _) = inscribe(&core, &ord);
+
+  ord.sync_server();
+
+  let response = reqwest::blocking::Client::new()
+    .get(ord.url().join(&format!("/content/{inscription}")).unwrap())
+    .header("range", "bytes=10-20")
+    .send()
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+  assert_eq!(response.headers()["accept-ranges"], "bytes");
+  assert_eq!(response.headers()["content-range"], "bytes */3");
+  assert!(response.bytes().unwrap().is_empty());
+}
+
+#[test]
+fn content_range_suffix() {
+  let core = mockcore::spawn();
+  let ord = TestServer::spawn(&core);
+
+  create_wallet(&core, &ord);
+
+  let (inscription, _) = inscribe(&core, &ord);
+
+  ord.sync_server();
+
+  let response = reqwest::blocking::Client::new()
+    .get(ord.url().join(&format!("/content/{inscription}")).unwrap())
+    .header("range", "bytes=-1")
+    .send()
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+  assert_eq!(response.bytes().unwrap().as_ref(), b"O");
+}
+
+#[test]
+fn content_multi_range_request_is_ignored() {
+  let core = mockcore::spawn();
+  let ord = TestServer::spawn(&core);
+
+  create_wallet(&core, &ord);
+
+  let (inscription, _) = inscribe(&core, &ord);
+
+  ord.sync_server();
+
+  let response = reqwest::blocking::Client::new()
+    .get(ord.url().join(&format!("/content/{inscription}")).unwrap())
+    .header("range", "bytes=0-0,2-2")
+    .send()
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(response.headers()["accept-ranges"], "bytes");
+  assert!(!response.headers().contains_key("content-range"));
+  assert_eq!(response.bytes().unwrap().as_ref(), b"FOO");
+}
+
+#[test]
+fn content_unsupported_range_unit_is_ignored() {
+  let core = mockcore::spawn();
+  let ord = TestServer::spawn(&core);
+
+  create_wallet(&core, &ord);
+
+  let (inscription, _) = inscribe(&core, &ord);
+
+  ord.sync_server();
+
+  let response = reqwest::blocking::Client::new()
+    .get(ord.url().join(&format!("/content/{inscription}")).unwrap())
+    .header("range", "items=0-1")
+    .send()
+    .unwrap();
+
+  assert_eq!(response.status(), StatusCode::OK);
+  assert_eq!(response.headers()["accept-ranges"], "bytes");
+  assert!(!response.headers().contains_key("content-range"));
+  assert_eq!(response.bytes().unwrap().as_ref(), b"FOO");
 }
 
 #[test]
