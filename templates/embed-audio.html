@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang=en>
+  <head>
+    <meta charset=utf-8>
+    <meta name=viewport content='width=device-width,initial-scale=1.0'>
+    <title>{{ self.title }}</title>
+    <link rel=stylesheet href=/static/embed-audio.css>
+%% if self.is_opus {
+    <script>
+      var Module = Module || {};
+
+      Object.defineProperty(Module, 'locateFile', {
+        value: function(path) {
+          return '/static/' + path;
+        },
+        writable: false,
+        configurable: false
+      });
+    </script>
+    <script src="/static/opus-stream-decoder.js"></script>
+    <script src="/static/preview-audio.js?v=2" type=module></script>
+%% }
+  </head>
+  <body>
+    <div class=embed-frame>
+      <div id=artwork style="background-image: url(/artwork/{{self.inscription_id}});"></div>
+      <div class=embed-meta>
+        <p class=embed-title>{{ self.title }}</p>
+        <a class=embed-attribution href=/inscription/{{self.inscription_id}} target=_blank rel=noopener>View on Ordinals</a>
+      </div>
+      <audio id=audio-player controls preload=metadata>
+        <source src=/content/{{self.inscription_id}} type="{{self.content_type}}">
+      </audio>
+    </div>
+  </body>
+</html>
