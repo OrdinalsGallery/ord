@@ -264,3 +264,21 @@ pub struct AddressInfo {
 pub struct Offers {
   pub offers: Vec<String>,
 }
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct OEmbed {
+  #[serde(rename = "type")]
+  pub ty: String,
+  pub version: String,
+  pub html: String,
+  pub width: u32,
+  pub height: u32,
+  pub title: String,
+  pub provider_name: String,
+  pub provider_url: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub author_name: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub thumbnail_url: Option<String>,
+  pub cache_age: u32,
+}

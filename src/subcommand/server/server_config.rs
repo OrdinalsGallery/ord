@@ -49,4 +49,61 @@ impl ServerConfig {
 
     Ok([(header::CONTENT_SECURITY_POLICY, value)])
   }
+
+  pub(super) fn embed_content_security_policy(
+    &self,
+    media: Media,
+    host: Option<&str>,
+  ) -> ServerResult<[(HeaderName, HeaderValue); 1]> {
+    let base = match media {
+      Media::Audio => {
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; \
+         style-src 'self' 'unsafe-inline'; media-src 'self' blob:; \
+         connect-src 'self'; img-src 'self' data:"
+      }
+      Media::Image(_) => {
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      }
+      Media::Video => {
+        "default-src 'self'; media-src 'self' blob:; style-src 'self' 'unsafe-inline'"
+      }
+      _ => "default-src 'self'; style-src 'self' 'unsafe-inline'",
+    };
+
+    let scoped = if let Some(origin) = self.csp_origin.as_deref().or(host) {
+      base.replace("'self'", origin)
+    } else {
+      base.to_string()
+    };
+
+    let value = format!("{scoped}; frame-ancestors *")
+      .parse()
+      .map_err(|err| anyhow!("invalid embed content-security-policy: {err}"))?;
+
+    Ok([(header::CONTENT_SECURITY_POLICY, value)])
+  }
+
+  pub(super) fn public_origin(&self, headers: &HeaderMap) -> String {
+    if let Some(origin) = &self.csp_origin {
+      return origin.clone();
+    }
+
+    if let Some(domain) = &self.domain {
+      return format!("https://{domain}");
+    }
+
+    let host = headers
+      .get(header::HOST)
+      .and_then(|h| h.to_str().ok());
+
+    if let Some(host) = host {
+      let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("http");
+      return format!("{scheme}://{host}");
+    }
+
+    "http://localhost".into()
+  }
 }

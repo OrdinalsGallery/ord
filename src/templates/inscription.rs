@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::inscriptions::opus_metadata};
 
 #[derive(Boilerplate, Default)]
 pub struct InscriptionHtml {
@@ -26,6 +26,10 @@ impl PageContent for InscriptionHtml {
   fn title(&self) -> String {
     format!("Inscription {}", self.number)
   }
+
+  fn oembed_url(&self) -> Option<String> {
+    Some(format!("/inscription/{}", self.id))
+  }
 }
 
 impl InscriptionHtml {
@@ -51,175 +55,16 @@ impl InscriptionHtml {
   }
 
   pub fn opus_metadata(&self) -> Option<Value> {
-    use symphonia::core::{
-      formats::FormatOptions, io::MediaSourceStream, meta::MetadataOptions, probe::Hint,
-    };
-
     if self.inscription.content_encoding().is_some() {
       return None;
     }
 
-    let content_type = self.inscription.content_type()?.to_ascii_lowercase();
-    let is_opus_ogg = content_type == "audio/opus"
-      || content_type.starts_with("audio/opus;")
-      || (content_type.contains("audio/ogg") && content_type.contains("opus"));
-
-    if !is_opus_ogg {
+    let content_type = self.inscription.content_type()?;
+    if !opus_metadata::is_opus_content_type(content_type) {
       return None;
     }
 
-    let body = self.inscription.body()?.to_vec();
-    let media_source = MediaSourceStream::new(Box::new(Cursor::new(body)), Default::default());
-    let mut hint = Hint::new();
-    hint.with_extension("ogg");
-
-    let mut probed = symphonia::default::get_probe()
-      .format(
-        &hint,
-        media_source,
-        &FormatOptions::default(),
-        &MetadataOptions::default(),
-      )
-      .ok()?;
-
-    let metadata_queue = probed.format.metadata();
-    let metadata = metadata_queue.current()?;
-    let tags = metadata
-      .tags()
-      .iter()
-      .filter_map(|tag| {
-        let key = tag.key.trim();
-
-        if key.is_empty() || Self::is_picture_tag(key) {
-          return None;
-        }
-
-        Some((key.to_string(), tag.value.to_string()))
-      })
-      .collect::<Vec<(String, String)>>();
-
-    Self::opus_metadata_from_tags(tags)
-  }
-
-  fn is_picture_tag(key: &str) -> bool {
-    let upper = key.to_ascii_uppercase();
-    upper == "METADATA_BLOCK_PICTURE" || upper.contains("PICTURE")
-  }
-
-  fn opus_metadata_from_tags(tags: Vec<(String, String)>) -> Option<Value> {
-    const COMMON_FIELDS: [&str; 18] = [
-      "title",
-      "artist",
-      "album",
-      "album artist",
-      "date",
-      "track number",
-      "genre",
-      "composer",
-      "copyright",
-      "description",
-      "producer",
-      "engineer",
-      "mixer",
-      "assistant engineer",
-      "songwriter",
-      "mastering",
-      "inscribing",
-      "technology",
-    ];
-
-    let mut grouped = BTreeMap::<String, Vec<String>>::new();
-
-    for (key, value) in tags {
-      if Self::is_picture_tag(&key) {
-        continue;
-      }
-
-      let normalized_key = Self::normalize_opus_tag_key(&key);
-      if normalized_key.is_empty() {
-        continue;
-      }
-
-      grouped.entry(normalized_key).or_default().push(value);
-    }
-
-    if grouped.is_empty() {
-      return None;
-    }
-
-    let mut map = Vec::new();
-
-    for key in COMMON_FIELDS {
-      if let Some(values) = grouped.remove(key) {
-        map.push((
-          Value::Text(key.into()),
-          Self::opus_tag_values_to_value(values),
-        ));
-      }
-    }
-
-    for (key, values) in grouped {
-      map.push((Value::Text(key), Self::opus_tag_values_to_value(values)));
-    }
-
-    Some(Value::Map(map))
-  }
-
-  fn opus_tag_values_to_value(values: Vec<String>) -> Value {
-    if values.len() == 1 {
-      return Value::Text(values.into_iter().next().unwrap_or_default());
-    }
-
-    Value::Array(values.into_iter().map(Value::Text).collect())
-  }
-
-  fn normalize_opus_tag_key(key: &str) -> String {
-    let mut expanded = String::new();
-    let mut previous_was_lowercase = false;
-
-    for c in key.trim().chars() {
-      if c.is_ascii_uppercase() && previous_was_lowercase {
-        expanded.push(' ');
-      }
-
-      if matches!(c, '_' | '-' | '.') {
-        expanded.push(' ');
-      } else {
-        expanded.push(c);
-      }
-
-      previous_was_lowercase = c.is_ascii_lowercase();
-    }
-
-    let normalized = expanded
-      .split_whitespace()
-      .map(|part| part.to_ascii_lowercase())
-      .collect::<Vec<String>>()
-      .join(" ");
-
-    let compact = normalized.replace(' ', "");
-
-    match compact.as_str() {
-      "title" => "title".into(),
-      "artist" => "artist".into(),
-      "album" => "album".into(),
-      "albumartist" => "album artist".into(),
-      "date" | "year" => "date".into(),
-      "track" | "tracknumber" => "track number".into(),
-      "genre" => "genre".into(),
-      "composer" => "composer".into(),
-      "copyright" => "copyright".into(),
-      "description" | "comment" => "description".into(),
-      "producer" => "producer".into(),
-      "engineer" => "engineer".into(),
-      "mixer" => "mixer".into(),
-      "assistantengineer" => "assistant engineer".into(),
-      "songwriter" | "lyricist" => "songwriter".into(),
-      "mastering" => "mastering".into(),
-      "inscribing" => "inscribing".into(),
-      "technology" => "technology".into(),
-      _ => normalized,
-    }
+    opus_metadata::structured(self.inscription.body()?)
   }
 
   pub fn burn_metadata(&self) -> Option<Value> {
@@ -265,6 +110,11 @@ mod tests {
           <dd class=collapse>1{64}i1</dd>
           <dt>preview</dt>
           <dd><a href=/preview/1{64}i1>link</a></dd>
+          <dt>embed</dt>
+          <dd>
+            <a href=/embed/1{64}i1>link</a>
+            <button type=button data-embed-copy data-inscription-id=1{64}i1>copy embed code</button>
+          </dd>
           <dt>content</dt>
           <dd><a href=/content/1{64}i1>link</a></dd>
           <dt>content length</dt>
@@ -448,6 +298,11 @@ mod tests {
           <dd class=collapse>1{64}i1</dd>
           <dt>preview</dt>
           <dd><a href=/preview/1{64}i1>link</a></dd>
+          <dt>embed</dt>
+          <dd>
+            <a href=/embed/1{64}i1>link</a>
+            <button type=button data-embed-copy data-inscription-id=1{64}i1>copy embed code</button>
+          </dd>
           <dt>content</dt>
           <dd><a href=/content/1{64}i1>link</a></dd>
           <dt>content length</dt>
@@ -511,6 +366,11 @@ mod tests {
           <dd class=collapse>1{64}i1</dd>
           <dt>preview</dt>
           <dd><a href=/preview/1{64}i1>link</a></dd>
+          <dt>embed</dt>
+          <dd>
+            <a href=/embed/1{64}i1>link</a>
+            <button type=button data-embed-copy data-inscription-id=1{64}i1>copy embed code</button>
+          </dd>
           <dt>content</dt>
           <dd><a href=/content/1{64}i1>link</a></dd>
           <dt>content length</dt>
@@ -573,6 +433,11 @@ mod tests {
           <dd class=collapse>1{64}i1</dd>
           <dt>preview</dt>
           <dd><a href=/preview/1{64}i1>link</a></dd>
+          <dt>embed</dt>
+          <dd>
+            <a href=/embed/1{64}i1>link</a>
+            <button type=button data-embed-copy data-inscription-id=1{64}i1>copy embed code</button>
+          </dd>
           <dt>content</dt>
           <dd><a href=/content/1{64}i1>link</a></dd>
           <dt>content length</dt>
@@ -700,7 +565,7 @@ mod tests {
 
   #[test]
   fn opus_metadata_key_normalization_ordering_and_picture_filtering() {
-    let metadata = InscriptionHtml::opus_metadata_from_tags(vec![
+    let metadata = opus_metadata::from_tags(vec![
       ("METADATA_BLOCK_PICTURE".into(), "base64-data".into()),
       ("ALBUM_ARTIST".into(), "Album Artist".into()),
       ("TRACKNUMBER".into(), "3".into()),

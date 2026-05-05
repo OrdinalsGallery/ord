@@ -111,6 +111,11 @@
 %% }
   <dt>preview</dt>
   <dd><a href=/preview/{{self.id}}>link</a></dd>
+  <dt>embed</dt>
+  <dd>
+    <a href=/embed/{{self.id}}>link</a>
+    <button type=button data-embed-copy data-inscription-id={{self.id}}>copy embed code</button>
+  </dd>
   <dt>content</dt>
   <dd><a href=/content/{{self.id}}>link</a></dd>
 %% if let Some(content_length) = self.inscription.content_length() {

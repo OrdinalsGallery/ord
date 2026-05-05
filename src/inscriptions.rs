@@ -13,5 +13,6 @@ mod envelope;
 mod inscription;
 pub(crate) mod inscription_id;
 pub(crate) mod media;
+pub(crate) mod opus_metadata;
 mod tag;
 pub(crate) mod teleburn;

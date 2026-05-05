@@ -6,13 +6,15 @@ use {
     range_header::RangeHeader,
   },
   super::*,
+  crate::inscriptions::opus_metadata,
   crate::templates::{
-    AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, GalleriesHtml,
-    GalleryHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml,
-    ItemHtml, OutputHtml, PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml,
-    PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml,
-    PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml, RareTxt, RuneHtml, RuneNotFoundHtml,
-    RunesHtml, SatHtml, SatscardHtml, TransactionHtml,
+    AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, EmbedAudioHtml,
+    EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml, GalleriesHtml, GalleryHtml, HomeHtml,
+    InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, ItemHtml, OutputHtml,
+    PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml,
+    PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml,
+    PreviewUnknownHtml, PreviewVideoHtml, RareTxt, RuneHtml, RuneNotFoundHtml, RunesHtml, SatHtml,
+    SatscardHtml, TransactionHtml,
   },
   axum::{
     Router,
@@ -76,6 +78,24 @@ pub(crate) enum OutputType {
 #[derive(Deserialize)]
 struct Search {
   query: String,
+}
+
+#[derive(Deserialize)]
+struct OEmbedQuery {
+  url: String,
+  format: Option<String>,
+  maxwidth: Option<u32>,
+  maxheight: Option<u32>,
+}
+
+fn parse_inscription_id_from_url(url: &str) -> Option<InscriptionId> {
+  let parsed = Url::parse(url).ok()?;
+  let mut segs = parsed.path_segments()?;
+  let head = segs.next()?;
+  if !matches!(head, "inscription" | "preview" | "embed") {
+    return None;
+  }
+  segs.next()?.parse().ok()
 }
 
 #[derive(RustEmbed)]
@@ -267,6 +287,8 @@ impl Server {
           "/parents/{inscription_id}/{page}",
           get(Self::parents_paginated),
         )
+        .route("/embed/{inscription_id}", get(Self::embed))
+        .route("/oembed", get(Self::oembed))
         .route("/preview/{inscription_id}", get(Self::preview))
         .route("/rare.txt", get(Self::rare_txt))
         .route("/rune/{rune}", get(Self::rune))
@@ -1549,6 +1571,230 @@ impl Server {
 
   async fn bounties() -> Redirect {
     Redirect::to("https://docs.ordinals.com/bounties")
+  }
+
+  async fn embed(
+    Extension(index): Extension<Arc<Index>>,
+    Extension(settings): Extension<Arc<Settings>>,
+    Extension(server_config): Extension<Arc<ServerConfig>>,
+    Path(inscription_id): Path<InscriptionId>,
+    headers: HeaderMap,
+  ) -> ServerResult {
+    task::block_in_place(|| {
+      let inscription_number = index
+        .get_inscription_entry(inscription_id)?
+        .ok_or_not_found(|| format!("inscription {inscription_id}"))?
+        .inscription_number;
+
+      if settings.is_hidden(inscription_id) {
+        return Ok(
+          EmbedUnknownHtml {
+            inscription_id,
+            inscription_number,
+          }
+          .into_response(),
+        );
+      }
+
+      let mut inscription = index
+        .get_inscription_by_id(inscription_id)?
+        .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+      if let Some(delegate) = inscription.delegate() {
+        inscription = index
+          .get_inscription_by_id(delegate)?
+          .ok_or_not_found(|| format!("delegate {inscription_id}"))?
+      }
+
+      let media = inscription.media();
+
+      if let Media::Iframe = media {
+        return Ok(Redirect::to(&format!("/inscription/{inscription_id}")).into_response());
+      }
+
+      let host = headers.get(header::HOST).and_then(|h| h.to_str().ok());
+      let scheme = headers
+        .get("x-forwarded-proto")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("http");
+      let origin = host.map(|h| format!("{scheme}://{h}"));
+      let csp = server_config.embed_content_security_policy(media, origin.as_deref())?;
+
+      let opus_audio = matches!(media, Media::Audio)
+        && inscription
+          .content_type()
+          .map(opus_metadata::is_opus_content_type)
+          .unwrap_or(false);
+
+      let opus_entries = if opus_audio {
+        inscription
+          .body()
+          .map(opus_metadata::display_entries)
+          .unwrap_or_default()
+      } else {
+        Vec::new()
+      };
+
+      let title = opus_entries
+        .iter()
+        .find(|(key, _)| key == "title")
+        .map(|(_, value)| value.clone())
+        .unwrap_or_else(|| format!("Inscription {inscription_number}"));
+
+      match media {
+        Media::Audio => {
+          let content_type = inscription
+            .content_type()
+            .unwrap_or("application/octet-stream")
+            .to_string();
+          let is_opus = opus_metadata::is_opus_content_type(&content_type);
+          Ok(
+            (
+              csp,
+              EmbedAudioHtml {
+                inscription_id,
+                content_type,
+                is_opus,
+                title,
+                metadata: opus_entries,
+              },
+            )
+              .into_response(),
+          )
+        }
+        Media::Image(image_rendering) => Ok(
+          (
+            csp,
+            EmbedImageHtml {
+              inscription_id,
+              image_rendering,
+              title,
+            },
+          )
+            .into_response(),
+        ),
+        Media::Video => Ok(
+          (
+            csp,
+            EmbedVideoHtml {
+              inscription_id,
+              title,
+            },
+          )
+            .into_response(),
+        ),
+        Media::Iframe => unreachable!(),
+        _ => Ok(
+          (
+            csp,
+            EmbedUnknownHtml {
+              inscription_id,
+              inscription_number,
+            },
+          )
+            .into_response(),
+        ),
+      }
+    })
+  }
+
+  async fn oembed(
+    Extension(index): Extension<Arc<Index>>,
+    Extension(settings): Extension<Arc<Settings>>,
+    Extension(server_config): Extension<Arc<ServerConfig>>,
+    Query(query): Query<OEmbedQuery>,
+    headers: HeaderMap,
+  ) -> ServerResult<Response> {
+    task::block_in_place(|| {
+      if matches!(query.format.as_deref(), Some("xml")) {
+        return Ok(StatusCode::NOT_IMPLEMENTED.into_response());
+      }
+
+      let inscription_id = parse_inscription_id_from_url(&query.url)
+        .ok_or_not_found(|| format!("oembed url {}", query.url))?;
+
+      if settings.is_hidden(inscription_id) {
+        return Err(ServerError::NotFound(format!(
+          "inscription {inscription_id} not found"
+        )));
+      }
+
+      let inscription_number = index
+        .get_inscription_entry(inscription_id)?
+        .ok_or_not_found(|| format!("inscription {inscription_id}"))?
+        .inscription_number;
+
+      let mut inscription = index
+        .get_inscription_by_id(inscription_id)?
+        .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+      if let Some(delegate) = inscription.delegate() {
+        inscription = index
+          .get_inscription_by_id(delegate)?
+          .ok_or_not_found(|| format!("delegate {inscription_id}"))?
+      }
+
+      let media = inscription.media();
+      let public_origin = server_config.public_origin(&headers);
+
+      let (default_width, default_height) = match media {
+        Media::Audio => (480u32, 120u32),
+        Media::Image(_) => (480u32, 480u32),
+        Media::Video => (640u32, 360u32),
+        _ => (480u32, 240u32),
+      };
+
+      let width = query
+        .maxwidth
+        .map(|m| m.min(default_width))
+        .unwrap_or(default_width);
+      let height = query
+        .maxheight
+        .map(|m| m.min(default_height))
+        .unwrap_or(default_height);
+
+      let (title, author_name) = if matches!(media, Media::Audio)
+        && inscription
+          .content_type()
+          .map(opus_metadata::is_opus_content_type)
+          .unwrap_or(false)
+      {
+        let body = inscription.body();
+        let extracted_title = body
+          .and_then(opus_metadata::title)
+          .unwrap_or_else(|| format!("Inscription {inscription_number}"));
+        let extracted_artist = body.and_then(opus_metadata::artist);
+        (extracted_title, extracted_artist)
+      } else {
+        (format!("Inscription {inscription_number}"), None)
+      };
+
+      let html = format!(
+        r#"<iframe src="{public_origin}/embed/{inscription_id}" width="{width}" height="{height}" frameborder="0" allowfullscreen></iframe>"#
+      );
+
+      let thumbnail_url = if matches!(media, Media::Audio) {
+        Some(format!("{public_origin}/artwork/{inscription_id}"))
+      } else {
+        None
+      };
+
+      let oembed = api::OEmbed {
+        ty: "rich".into(),
+        version: "1.0".into(),
+        html,
+        width,
+        height,
+        title,
+        provider_name: "Ordinals".into(),
+        provider_url: public_origin.clone(),
+        author_name,
+        thumbnail_url,
+        cache_age: 86_400,
+      };
+
+      Ok(Json(oembed).into_response())
+    })
   }
 
   async fn preview(
@@ -5539,6 +5785,404 @@ mod tests {
       &expected_csp,
       format!(r#".*<audio .*>\s*<source src=/content/{inscription_id} type="audio/flac">.*"#),
     );
+  }
+
+  #[test]
+  fn embed_audio_returns_audio_element() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    assert!(body.contains(&format!(
+      r#"<source src=/content/{inscription_id} type="audio/flac">"#
+    )));
+    assert!(body.contains("id=audio-player"));
+    assert!(body.contains(&format!("/inscription/{inscription_id}")));
+  }
+
+  #[test]
+  fn embed_audio_csp_has_frame_ancestors_wildcard() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    assert_eq!(response.status(), StatusCode::OK);
+    let csp = response
+      .headers()
+      .get(header::CONTENT_SECURITY_POLICY)
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .to_string();
+    assert!(csp.contains("frame-ancestors *"), "csp = {csp}");
+    assert!(csp.contains("script-src"));
+    assert!(csp.contains("'wasm-unsafe-eval'"));
+    assert!(csp.contains("media-src"));
+  }
+
+  #[test]
+  fn embed_audio_csp_uses_csp_origin_when_set() {
+    let server = TestServer::builder()
+      .chain(Chain::Regtest)
+      .server_option("--csp-origin", "https://ordinals.com")
+      .build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    let csp = response
+      .headers()
+      .get(header::CONTENT_SECURITY_POLICY)
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .to_string();
+    assert!(csp.contains("default-src https://ordinals.com"), "csp = {csp}");
+    assert!(csp.contains("frame-ancestors *"), "csp = {csp}");
+  }
+
+  #[test]
+  fn embed_image_returns_img() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("image/png", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    assert!(body.contains(&format!("<img src=/content/{inscription_id}")));
+  }
+
+  #[test]
+  fn embed_video_returns_video_element() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("video/webm", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    assert!(body.contains("<video"));
+    assert!(body.contains(&format!("<source src=/content/{inscription_id}")));
+  }
+
+  #[test]
+  fn embed_iframe_redirects_to_inscription() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("text/html", "<p>hi</p>").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    server.assert_redirect(
+      &format!("/embed/{inscription_id}"),
+      &format!("/inscription/{inscription_id}"),
+    );
+  }
+
+  #[test]
+  fn embed_unknown_for_pdf() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("application/pdf", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    assert!(body.contains("not embeddable"));
+    assert!(body.contains(&format!("/inscription/{inscription_id}")));
+  }
+
+  #[test]
+  fn embed_audio_default_title_when_no_opus_tag() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    let body = response.text().unwrap();
+    assert!(body.contains("<title>Inscription 0</title>"));
+  }
+
+  #[test]
+  fn embed_csp_always_set_for_image() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("image/png", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/embed/{inscription_id}"));
+    let csp = response
+      .headers()
+      .get(header::CONTENT_SECURITY_POLICY)
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .to_string();
+    assert!(csp.contains("img-src"), "csp = {csp}");
+    assert!(csp.contains("frame-ancestors *"), "csp = {csp}");
+  }
+
+  #[test]
+  fn oembed_returns_well_formed_json_for_audio() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let url = format!("http://localhost/inscription/{inscription_id}");
+    let oembed: api::OEmbed =
+      server.get_json(format!("/oembed?url={}", urlencoding::encode(&url)));
+    assert_eq!(oembed.version, "1.0");
+    assert_eq!(oembed.ty, "rich");
+    assert_eq!(oembed.provider_name, "Ordinals");
+    assert!(oembed.html.contains("<iframe"));
+    assert!(oembed.html.contains(&format!("/embed/{inscription_id}")));
+    assert_eq!(oembed.title, "Inscription 0");
+    assert_eq!(oembed.cache_age, 86_400);
+  }
+
+  #[test]
+  fn oembed_for_image_returns_rich_iframe() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("image/png", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let url = format!("http://localhost/inscription/{inscription_id}");
+    let oembed: api::OEmbed =
+      server.get_json(format!("/oembed?url={}", urlencoding::encode(&url)));
+    assert_eq!(oembed.ty, "rich");
+    assert!(oembed.html.contains("<iframe"));
+    assert!(oembed.thumbnail_url.is_none());
+  }
+
+  #[test]
+  fn oembed_html_uses_csp_origin_when_configured() {
+    let server = TestServer::builder()
+      .chain(Chain::Regtest)
+      .server_option("--csp-origin", "https://ordinals.com")
+      .build();
+    server.mine_blocks(1);
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.mine_blocks(1);
+
+    let url = format!("https://ordinals.com/inscription/{inscription_id}");
+    let oembed: api::OEmbed =
+      server.get_json(format!("/oembed?url={}", urlencoding::encode(&url)));
+    assert!(
+      oembed
+        .html
+        .contains(&format!("https://ordinals.com/embed/{inscription_id}"))
+    );
+  }
+
+  #[test]
+  fn oembed_404_for_invalid_url() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let url = "https://example.com/foo";
+    let response = server.get(format!("/oembed?url={}", urlencoding::encode(url)));
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+  }
+
+  #[test]
+  fn oembed_400_for_missing_url_param() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let response = server.get("/oembed");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+  }
+
+  #[test]
+  fn oembed_xml_format_returns_501() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+    server.mine_blocks(1);
+    let url = format!("http://localhost/inscription/{inscription_id}");
+    let response = server.get(format!(
+      "/oembed?url={}&format=xml",
+      urlencoding::encode(&url)
+    ));
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+  }
+
+  #[test]
+  fn oembed_accepts_inscription_preview_and_embed_paths() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+    server.mine_blocks(1);
+
+    for prefix in ["inscription", "preview", "embed"] {
+      let url = format!("http://localhost/{prefix}/{inscription_id}");
+      let oembed: api::OEmbed =
+        server.get_json(format!("/oembed?url={}", urlencoding::encode(&url)));
+      assert_eq!(oembed.ty, "rich");
+      assert_eq!(oembed.title, "Inscription 0");
+    }
+  }
+
+  #[test]
+  fn oembed_clamps_maxwidth_maxheight() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("image/png", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+    server.mine_blocks(1);
+    let url = format!("http://localhost/inscription/{inscription_id}");
+    let oembed: api::OEmbed = server.get_json(format!(
+      "/oembed?url={}&maxwidth=200&maxheight=80",
+      urlencoding::encode(&url)
+    ));
+    assert!(oembed.width <= 200);
+    assert!(oembed.height <= 80);
+    assert!(oembed.html.contains(&format!(r#"width="{}""#, oembed.width)));
+    assert!(oembed.html.contains(&format!(r#"height="{}""#, oembed.height)));
+  }
+
+  #[test]
+  fn inscription_page_includes_oembed_discovery_link() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/inscription/{inscription_id}"));
+    let body = response.text().unwrap();
+    assert!(body.contains(r#"type='application/json+oembed'"#));
+    assert!(body.contains("/oembed?url="));
+    assert!(body.contains(&format!("/inscription/{inscription_id}")));
+  }
+
+  #[test]
+  fn inscription_page_loads_embed_copy_script() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("audio/flac", "hello").to_witness())],
+      ..default()
+    });
+    let inscription_id = InscriptionId { txid, index: 0 };
+    server.mine_blocks(1);
+
+    let response = server.get(format!("/inscription/{inscription_id}"));
+    let body = response.text().unwrap();
+    assert!(body.contains("/static/inscription-embed.js"));
+    assert!(body.contains("data-embed-copy"));
+  }
+
+  #[test]
+  fn embed_copy_script_static_asset_served() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+    let response = server.get("/static/inscription-embed.js");
+    assert_eq!(response.status(), StatusCode::OK);
+    let content_type = response
+      .headers()
+      .get(header::CONTENT_TYPE)
+      .unwrap()
+      .to_str()
+      .unwrap();
+    assert!(content_type.contains("javascript"), "ct = {content_type}");
   }
 
   #[test]

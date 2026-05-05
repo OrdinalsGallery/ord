@@ -8,6 +8,7 @@ pub(crate) use {
   children::ChildrenHtml,
   clock::ClockSvg,
   collections::CollectionsHtml,
+  embed::{EmbedAudioHtml, EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml},
   galleries::GalleriesHtml,
   gallery::GalleryHtml,
   home::HomeHtml,
@@ -40,6 +41,7 @@ pub mod blocks;
 mod children;
 mod clock;
 pub mod collections;
+mod embed;
 mod galleries;
 mod gallery;
 mod home;
@@ -84,6 +86,27 @@ where
     }
   }
 
+  fn page_origin(&self) -> String {
+    if let Some(origin) = &self.config.csp_origin {
+      origin.clone()
+    } else if let Some(domain) = &self.config.domain {
+      format!("https://{domain}")
+    } else {
+      "https://ordinals.com".into()
+    }
+  }
+
+  fn oembed_link(&self) -> String {
+    let Some(path) = self.content.oembed_url() else {
+      return String::new();
+    };
+    let absolute = format!("{}{}", self.page_origin(), path);
+    format!(
+      r#"<link rel=alternate type='application/json+oembed' href='/oembed?url={absolute}' title='{title}'>"#,
+      title = self.content.title(),
+    )
+  }
+
   fn superscript(&self) -> String {
     if self.config.chain == Chain::Mainnet {
       "beta".into()
@@ -95,6 +118,10 @@ where
 
 pub trait PageContent: Display + 'static {
   fn title(&self) -> String;
+
+  fn oembed_url(&self) -> Option<String> {
+    None
+  }
 
   fn page(self, server_config: Arc<ServerConfig>) -> PageHtml<Self>
   where
@@ -143,11 +170,13 @@ mod tests {
     <meta property=twitter:card content=summary>
     <title>Foo</title>
     <link rel=alternate href=/feed.xml type=application/rss\+xml title='Inscription Feed'>
+\s*
     <link rel=icon href=/static/favicon.png>
     <link rel=icon href=/static/favicon.svg>
     <link rel=stylesheet href=/static/index.css>
     <link rel=stylesheet href=/static/modern-normalize.css>
     <script src=/static/index.js></script>
+    <script src=/static/inscription-embed.js defer></script>
   </head>
   <body>
   <header>
