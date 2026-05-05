@@ -117,6 +117,42 @@ pub(crate) fn structured(body: &[u8]) -> Option<Value> {
   from_tags(raw_tags(body))
 }
 
+pub(crate) fn display_entries(body: &[u8]) -> Vec<(String, String)> {
+  let mut grouped = BTreeMap::<String, Vec<String>>::new();
+
+  for (key, value) in raw_tags(body) {
+    if is_picture_tag(&key) {
+      continue;
+    }
+
+    let normalized_key = normalize_opus_tag_key(&key);
+    if normalized_key.is_empty() {
+      continue;
+    }
+
+    let sanitized = sanitize_tag(value);
+    if sanitized.is_empty() {
+      continue;
+    }
+
+    grouped.entry(normalized_key).or_default().push(sanitized);
+  }
+
+  let mut entries = Vec::new();
+
+  for key in COMMON_FIELDS {
+    if let Some(values) = grouped.remove(key) {
+      entries.push((key.to_string(), values.join(", ")));
+    }
+  }
+
+  for (key, values) in grouped {
+    entries.push((key, values.join(", ")));
+  }
+
+  entries
+}
+
 pub(crate) fn from_tags(tags: Vec<(String, String)>) -> Option<Value> {
   let mut grouped = BTreeMap::<String, Vec<String>>::new();
 
@@ -262,6 +298,21 @@ mod tests {
       sanitize_tag(long).chars().count(),
       SANITIZED_TAG_MAX_LEN
     );
+  }
+
+  #[test]
+  fn display_entries_orders_common_fields_first_and_excludes_pictures() {
+    let entries = display_entries(COMINGSOON_OPUS);
+    assert!(!entries.is_empty());
+    assert_eq!(entries[0].0, "title");
+    assert!(entries.iter().any(|(k, _)| k == "artist"));
+    assert!(!entries.iter().any(|(k, _)| is_picture_tag(k)));
+    assert!(entries.iter().all(|(_, v)| !v.is_empty()));
+  }
+
+  #[test]
+  fn display_entries_returns_empty_for_non_opus() {
+    assert!(display_entries(b"not opus bytes").is_empty());
   }
 
   #[test]

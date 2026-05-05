@@ -23,14 +23,48 @@
   </head>
   <body>
     <div class=embed-frame>
-      <div id=artwork style="background-image: url(/artwork/{{self.inscription_id}});"></div>
+%% if !self.metadata.is_empty() {
+      <div class=embed-toolbar>
+        <button type=button class=embed-info-toggle aria-expanded=false aria-controls=embed-metadata-panel aria-label="Show track info">i</button>
+      </div>
+%% }
+      <div class=embed-art-wrap>
+        <div id=artwork style="background-image: url(/artwork/{{self.inscription_id}});"></div>
+%% if !self.metadata.is_empty() {
+        <div class=embed-metadata-panel id=embed-metadata-panel hidden>
+          <dl>
+%% for (label, value) in &self.metadata {
+            <dt>{{ label }}</dt>
+            <dd>{{ value }}</dd>
+%% }
+          </dl>
+        </div>
+%% }
+      </div>
       <div class=embed-meta>
         <p class=embed-title>{{ self.title }}</p>
-        <a class=embed-attribution href=/inscription/{{self.inscription_id}} target=_blank rel=noopener>View on Ordinals</a>
+        <a class=embed-attribution href=/inscription/{{self.inscription_id}} target=_blank rel=noopener>View on Ordinals.Gallery</a>
       </div>
       <audio id=audio-player controls preload=metadata>
         <source src=/content/{{self.inscription_id}} type="{{self.content_type}}">
       </audio>
+%% if !self.metadata.is_empty() {
+      <script>
+        (function() {
+          var btn = document.querySelector('.embed-info-toggle');
+          var panel = document.getElementById('embed-metadata-panel');
+          var frame = document.querySelector('.embed-frame');
+          if (!btn || !panel || !frame) return;
+          btn.addEventListener('click', function() {
+            var open = frame.classList.toggle('embed-info-open');
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            btn.setAttribute('aria-label', open ? 'Hide track info' : 'Show track info');
+            btn.textContent = open ? '×' : 'i';
+            panel.hidden = !open;
+          });
+        })();
+      </script>
+%% }
     </div>
   </body>
 </html>

@@ -6,6 +6,7 @@ pub(crate) struct EmbedAudioHtml {
   pub(crate) content_type: String,
   pub(crate) is_opus: bool,
   pub(crate) title: String,
+  pub(crate) metadata: Vec<(String, String)>,
 }
 
 #[derive(Boilerplate)]
@@ -39,6 +40,7 @@ mod tests {
       content_type: "audio/flac".into(),
       is_opus: false,
       title: "My Song".into(),
+      metadata: Vec::new(),
     }
     .to_string();
 
@@ -49,6 +51,7 @@ mod tests {
       "missing audio source for {id}"
     );
     assert!(!html.contains("opus-stream-decoder"));
+    assert!(!html.contains("embed-info-toggle"));
   }
 
   #[test]
@@ -59,6 +62,7 @@ mod tests {
       content_type: "audio/ogg;codecs=opus".into(),
       is_opus: true,
       title: "Inscription 1".into(),
+      metadata: Vec::new(),
     }
     .to_string();
 
@@ -79,11 +83,34 @@ mod tests {
       content_type: "audio/flac".into(),
       is_opus: false,
       title: "<script>alert(1)</script>".into(),
+      metadata: Vec::new(),
     }
     .to_string();
 
     assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
     assert!(!html.contains("<script>alert(1)</script>"));
+  }
+
+  #[test]
+  fn embed_audio_renders_metadata_panel_when_entries_present() {
+    let html = EmbedAudioHtml {
+      inscription_id: inscription_id(1),
+      content_type: "audio/ogg;codecs=opus".into(),
+      is_opus: true,
+      title: "Track".into(),
+      metadata: vec![
+        ("title".into(), "Track".into()),
+        ("artist".into(), "Tatiana <Moroz>".into()),
+        ("description".into(), "Long\ntext".into()),
+      ],
+    }
+    .to_string();
+
+    assert!(html.contains("class=embed-info-toggle"));
+    assert!(html.contains("class=embed-metadata-panel"));
+    assert!(html.contains("<dt>artist</dt>"));
+    assert!(html.contains("Tatiana &lt;Moroz&gt;"));
+    assert!(!html.contains("<Moroz>"));
   }
 
   #[test]

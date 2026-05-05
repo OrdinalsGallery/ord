@@ -1620,20 +1620,26 @@ impl Server {
       let origin = host.map(|h| format!("{scheme}://{h}"));
       let csp = server_config.embed_content_security_policy(media, origin.as_deref())?;
 
-      let title = match media {
-        Media::Audio
-          if inscription
-            .content_type()
-            .map(opus_metadata::is_opus_content_type)
-            .unwrap_or(false) =>
-        {
-          inscription
-            .body()
-            .and_then(opus_metadata::title)
-            .unwrap_or_else(|| format!("Inscription {inscription_number}"))
-        }
-        _ => format!("Inscription {inscription_number}"),
+      let opus_audio = matches!(media, Media::Audio)
+        && inscription
+          .content_type()
+          .map(opus_metadata::is_opus_content_type)
+          .unwrap_or(false);
+
+      let opus_entries = if opus_audio {
+        inscription
+          .body()
+          .map(opus_metadata::display_entries)
+          .unwrap_or_default()
+      } else {
+        Vec::new()
       };
+
+      let title = opus_entries
+        .iter()
+        .find(|(key, _)| key == "title")
+        .map(|(_, value)| value.clone())
+        .unwrap_or_else(|| format!("Inscription {inscription_number}"));
 
       match media {
         Media::Audio => {
@@ -1650,6 +1656,7 @@ impl Server {
                 content_type,
                 is_opus,
                 title,
+                metadata: opus_entries,
               },
             )
               .into_response(),
