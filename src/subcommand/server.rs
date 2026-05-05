@@ -1857,6 +1857,14 @@ impl Server {
             .unwrap_or("application/octet-stream")
             .to_string();
           let is_opus = content_type.starts_with("audio/ogg");
+          let metadata = if opus_metadata::is_opus_content_type(&content_type) {
+            inscription
+              .body()
+              .map(opus_metadata::display_entries)
+              .unwrap_or_default()
+          } else {
+            Vec::new()
+          };
           Ok(
             (
               content_security_policy,
@@ -1865,6 +1873,7 @@ impl Server {
                 inscription_number,
                 content_type,
                 is_opus,
+                metadata,
               },
             )
               .into_response(),
