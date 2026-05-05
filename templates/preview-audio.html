@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Inscription {{self.inscription_number}} Preview</title>
-    <link rel=stylesheet href=/static/preview-audio.css?v=1>
+    <link rel=stylesheet href=/static/preview-audio.css?v=2>
     <script>
       if (new URLSearchParams(window.location.search).has('thumb')) {
         document.documentElement.classList.add('thumbnail');
@@ -35,7 +35,7 @@
         <polygon points="26,20 26,44 46,32" fill="rgba(255,255,255,0.9)"/>
       </svg>
     </div>
-    <div class=preview-frame style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: none;">
+    <div class=preview-frame>
 %% if !self.metadata.is_empty() {
       <div class=preview-toolbar>
         <button type=button class=preview-info-toggle aria-expanded=false aria-controls=preview-metadata-panel aria-label="Show track info">i</button>
