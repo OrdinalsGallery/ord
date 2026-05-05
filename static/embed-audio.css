@@ -24,7 +24,7 @@ body {
 }
 
 .embed-toolbar {
-  align-self: stretch;
+  width: 100%;
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -33,7 +33,7 @@ body {
 
 .embed-art-wrap {
   position: relative;
-  align-self: stretch;
+  width: 100%;
 }
 
 #artwork {
