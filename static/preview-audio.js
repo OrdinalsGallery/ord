@@ -1980,32 +1980,103 @@ class HybridOpusPlayer {
 
 const hybridPlayer = new HybridOpusPlayer();
 
+function opusPreviewWantAutoplay() {
+  const root = document.documentElement;
+
+  if (root.classList.contains('thumbnail')) {
+    return false;
+  }
+
+  if (document.querySelector('.embed-frame')) {
+    return false;
+  }
+
+  return !!document.querySelector('.preview-frame');
+}
+
+function opusSourceIsDecodedBlob(audioElement) {
+  try {
+    return (audioElement.currentSrc || audioElement.src || '').startsWith(
+      'blob:',
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  if (hybridPlayer.supportsOpusNatively() && !hybridPlayer.isSafari()) {
+  const audioElement = document.getElementById('audio-player');
+  const opusUrl = audioElement?.querySelector('source')?.src;
+  const wantAutoplay = opusPreviewWantAutoplay();
+
+  async function nativePreviewAutoplay() {
+    try {
+      await audioElement.play();
+    } catch (_) {
+    }
+
+    audioElement.addEventListener(
+      'canplay',
+      async () => {
+        try {
+          await audioElement.play();
+        } catch (_) {
+        }
+      },
+      { once: true },
+    );
+  }
+
+  const nativeOpusPlayback =
+    hybridPlayer.supportsOpusNatively() && !hybridPlayer.isSafari();
+
+  if (nativeOpusPlayback) {
+    if (wantAutoplay && audioElement) {
+      nativePreviewAutoplay();
+    }
+
     return;
   }
 
-  const audioElement = document.getElementById('audio-player');
-  const opusUrl = audioElement?.querySelector('source')?.src;
+  if (!audioElement || !opusUrl) {
+    return;
+  }
 
-  if (audioElement && opusUrl) {
-    let isProcessing = false;
+  let isProcessing = false;
 
-    audioElement.addEventListener('play', async (e) => {
-      if (isProcessing) return;
+  audioElement.addEventListener('play', async (e) => {
+    if (opusSourceIsDecodedBlob(audioElement)) {
+      return;
+    }
 
-      e.preventDefault();
+    if (isProcessing) {
+      return;
+    }
+
+    e.preventDefault();
+
+    isProcessing = true;
+
+    try {
+      await hybridPlayer.playOpusAudio(audioElement, opusUrl);
+    } catch (error) {
+      console.error('Hybrid player failed:', error);
+    } finally {
+      isProcessing = false;
+    }
+  });
+
+  if (wantAutoplay) {
+    void (async () => {
       isProcessing = true;
 
       try {
         await hybridPlayer.playOpusAudio(audioElement, opusUrl);
       } catch (error) {
-        console.error('Hybrid player failed:', error);
+        console.error('Opus autoplay failed:', error);
       } finally {
         isProcessing = false;
       }
-    });
-
-  } else {
+    })();
   }
 });
