@@ -6,7 +6,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Inscription {{self.inscription_number}} Preview</title>
-    <link rel=stylesheet href=/static/preview-audio.css>
+    <link rel=stylesheet href=/static/preview-audio.css?v=2>
     <script>
       if (new URLSearchParams(window.location.search).has('thumb')) {
         document.documentElement.classList.add('thumbnail');
@@ -25,7 +25,7 @@
       });
     </script>
     <script src="/static/opus-stream-decoder.js"></script>
-    <script src="/static/preview-audio.js?v=2" type=module></script>
+    <script src="/static/preview-audio.js?v=3" type=module></script>
 %% }
   </head>
   <body style="--artwork-url: url(/artwork/{{self.inscription_id}});">
@@ -35,11 +35,45 @@
         <polygon points="26,20 26,44 46,32" fill="rgba(255,255,255,0.9)"/>
       </svg>
     </div>
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; max-width: none;">
-      <div id="artwork" style="background-image: url(/artwork/{{self.inscription_id}}); background-size: contain; background-repeat: no-repeat; background-position: center; width: 90%; height: 300px; margin: 0 auto; display: block;"></div>
+    <div class=preview-frame>
+%% if !self.metadata.is_empty() {
+      <div class=preview-toolbar>
+        <button type=button class=preview-info-toggle aria-expanded=false aria-controls=preview-metadata-panel aria-label="Show track info">i</button>
+      </div>
+%% }
+      <div class=preview-art-wrap>
+        <div id="artwork" style="background-image: url(/artwork/{{self.inscription_id}}); background-size: contain; background-repeat: no-repeat; background-position: center; width: 100%; height: 100%; display: block;"></div>
+%% if !self.metadata.is_empty() {
+        <div class=preview-metadata-panel id=preview-metadata-panel hidden>
+          <dl>
+%% for (label, value) in &self.metadata {
+            <dt>{{ label }}</dt>
+            <dd>{{ value }}</dd>
+%% }
+          </dl>
+        </div>
+%% }
+      </div>
       <audio id="audio-player" controls style="width: 90%; max-width: none;">
         <source src=/content/{{self.inscription_id}} type="{{self.content_type}}">
       </audio>
     </div>
+%% if !self.metadata.is_empty() {
+    <script>
+      (function() {
+        var btn = document.querySelector('.preview-info-toggle');
+        var panel = document.getElementById('preview-metadata-panel');
+        var frame = document.querySelector('.preview-frame');
+        if (!btn || !panel || !frame) return;
+        btn.addEventListener('click', function() {
+          var open = frame.classList.toggle('preview-info-open');
+          btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          btn.setAttribute('aria-label', open ? 'Hide track info' : 'Show track info');
+          btn.textContent = open ? '×' : 'i';
+          panel.hidden = !open;
+        });
+      })();
+    </script>
+%% }
   </body>
 </html>

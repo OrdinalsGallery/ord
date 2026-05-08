@@ -6,6 +6,7 @@ pub(crate) struct PreviewAudioHtml {
   pub(crate) inscription_number: i32,
   pub(crate) content_type: String,
   pub(crate) is_opus: bool,
+  pub(crate) metadata: Vec<(String, String)>,
 }
 
 #[derive(Boilerplate)]
