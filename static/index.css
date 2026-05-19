@@ -458,6 +458,29 @@ dt.with-toolbar {
   padding: 0;
 }
 
+.sort-form {
+  display: flex;
+  flex: 0;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.sort-form label {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.sort-form select {
+  background: var(--light-bg);
+  border: 1px solid var(--light-fg);
+  border-radius: 3px;
+  color: var(--light-fg);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.15rem 0.3rem;
+}
+
 .copy-btn {
   background: none;
   border: none;

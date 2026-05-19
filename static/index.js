@@ -53,6 +53,10 @@ addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  for (let select of document.querySelectorAll('.sort-form select')) {
+    select.addEventListener('change', () => select.form.submit());
+  }
+
   let themeToggle = document.getElementById('theme-toggle');
   if (themeToggle) {
     const THEMES = ['ord', 'light', 'dark'];

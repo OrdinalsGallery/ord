@@ -14,7 +14,7 @@ pub(crate) use {
   home::HomeHtml,
   iframe::Iframe,
   input::InputHtml,
-  inscriptions::InscriptionsHtml,
+  inscriptions::{InscriptionsHtml, Sort as InscriptionsSort},
   inscriptions_block::InscriptionsBlockHtml,
   metadata::MetadataHtml,
   output::OutputHtml,

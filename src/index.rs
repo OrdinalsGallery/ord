@@ -2023,28 +2023,43 @@ impl Index {
     &self,
     page_size: u32,
     page_index: u32,
+    sort: crate::templates::inscriptions::Sort,
   ) -> Result<(Vec<InscriptionId>, bool)> {
+    use crate::templates::inscriptions::Sort;
+
     let rtx = self.database.begin_read()?;
 
     let sequence_number_to_inscription_entry =
       rtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?;
 
-    let last = sequence_number_to_inscription_entry
-      .iter()?
-      .next_back()
-      .map(|result| result.map(|(number, _entry)| number.value()))
-      .transpose()?
-      .unwrap_or_default();
+    let mut inscriptions = match sort {
+      Sort::Newest => {
+        let last = sequence_number_to_inscription_entry
+          .iter()?
+          .next_back()
+          .map(|result| result.map(|(number, _entry)| number.value()))
+          .transpose()?
+          .unwrap_or_default();
 
-    let start = last.saturating_sub(page_size.saturating_mul(page_index));
+        let start = last.saturating_sub(page_size.saturating_mul(page_index));
+        let end = start.saturating_sub(page_size);
 
-    let end = start.saturating_sub(page_size);
+        sequence_number_to_inscription_entry
+          .range(end..=start)?
+          .rev()
+          .map(|result| result.map(|(_number, entry)| InscriptionEntry::load(entry.value()).id))
+          .collect::<Result<Vec<InscriptionId>, StorageError>>()?
+      }
+      Sort::Oldest => {
+        let start = page_size.saturating_mul(page_index);
+        let end = start.saturating_add(page_size);
 
-    let mut inscriptions = sequence_number_to_inscription_entry
-      .range(end..=start)?
-      .rev()
-      .map(|result| result.map(|(_number, entry)| InscriptionEntry::load(entry.value()).id))
-      .collect::<Result<Vec<InscriptionId>, StorageError>>()?;
+        sequence_number_to_inscription_entry
+          .range(start..=end)?
+          .map(|result| result.map(|(_number, entry)| InscriptionEntry::load(entry.value()).id))
+          .collect::<Result<Vec<InscriptionId>, StorageError>>()?
+      }
+    };
 
     let more = u32::try_from(inscriptions.len()).unwrap_or(u32::MAX) > page_size;
 
@@ -3926,7 +3941,7 @@ mod tests {
 
       context.mine_blocks(1);
 
-      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0).unwrap();
+      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0, crate::templates::inscriptions::Sort::Newest).unwrap();
       assert_eq!(inscriptions, &[inscription_id]);
       assert!(!more);
     }
@@ -3953,7 +3968,7 @@ mod tests {
 
       assert_eq!(ids.len(), 100);
 
-      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0).unwrap();
+      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0, crate::templates::inscriptions::Sort::Newest).unwrap();
       assert_eq!(inscriptions, ids);
       assert!(more);
     }

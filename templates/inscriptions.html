@@ -1,4 +1,12 @@
 <h1>All Inscriptions</h1>
+<form class=sort-form action=/inscriptions method=get>
+  <label>sort
+    <select name=sort>
+      <option value=newest{{self.selected_if(Sort::Newest)}}>newest</option>
+      <option value=oldest{{self.selected_if(Sort::Oldest)}}>oldest</option>
+    </select>
+  </label>
+</form>
 <div class=thumbnails>
 %% for id in &self.inscriptions {
   {{Iframe::thumbnail(*id)}}
@@ -6,12 +14,12 @@
 </div>
 <div class=center>
 %% if let Some(prev) = self.prev {
-<a class=prev href=/inscriptions/{{prev}}>prev</a>
+<a class=prev href=/inscriptions/{{prev}}{{self.sort_query()}}>prev</a>
 %% } else {
 prev
 %% }
 %% if let Some(next) = self.next {
-<a class=next href=/inscriptions/{{next}}>next</a>
+<a class=next href=/inscriptions/{{next}}{{self.sort_query()}}>next</a>
 %% } else {
 next
 %% }

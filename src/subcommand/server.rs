@@ -10,7 +10,8 @@ use {
   crate::templates::{
     AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, EmbedAudioHtml,
     EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml, GalleriesHtml, GalleryHtml, HomeHtml,
-    InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, ItemHtml, OutputHtml,
+    InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, InscriptionsSort,
+    ItemHtml, OutputHtml,
     PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml,
     PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml,
     PreviewUnknownHtml, PreviewVideoHtml, RareTxt, RuneHtml, RuneNotFoundHtml, RunesHtml, SatHtml,
@@ -57,6 +58,11 @@ enum SpawnConfig {
   Https(AxumAcceptor),
   Http,
   Redirect(String),
+}
+
+#[derive(Deserialize)]
+pub(crate) struct InscriptionsQuery {
+  pub(crate) sort: Option<InscriptionsSort>,
 }
 
 #[derive(Deserialize)]
@@ -2523,12 +2529,14 @@ impl Server {
   async fn inscriptions(
     Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    Query(query): Query<InscriptionsQuery>,
     accept_json: AcceptJson,
   ) -> ServerResult {
     Self::inscriptions_paginated(
       Extension(server_config),
       Extension(index),
       Path(0),
+      Query(query),
       accept_json,
     )
     .await
@@ -2538,10 +2546,12 @@ impl Server {
     Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
     Path(page_index): Path<u32>,
+    Query(query): Query<InscriptionsQuery>,
     AcceptJson(accept_json): AcceptJson,
   ) -> ServerResult {
     task::block_in_place(|| {
-      let (inscriptions, more) = index.get_inscriptions_paginated(100, page_index)?;
+      let sort = query.sort.unwrap_or_default();
+      let (inscriptions, more) = index.get_inscriptions_paginated(100, page_index, sort)?;
 
       let prev = page_index.checked_sub(1);
 
@@ -2559,6 +2569,7 @@ impl Server {
           inscriptions,
           next,
           prev,
+          sort,
         }
         .page(server_config)
         .into_response()
