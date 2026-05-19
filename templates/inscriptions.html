@@ -1,12 +1,38 @@
-<h1>All Inscriptions</h1>
-<form class=sort-form action=/inscriptions method=get>
-  <label>sort
-    <select name=sort>
-      <option value=newest{{self.selected_if(Sort::Newest)}}>newest</option>
-      <option value=oldest{{self.selected_if(Sort::Oldest)}}>oldest</option>
-    </select>
-  </label>
-</form>
+<div class=inscriptions-header>
+  <h1>All Inscriptions</h1>
+  <form class=inscriptions-toolbar action=/inscriptions method=get>
+    <label class="toolbar-btn cursed-toggle {{self.cursed_class()}}" title="show cursed only">
+      <input type=checkbox name=cursed value=1{{self.cursed_checked()}}>
+      <img class=icon src=/static/skull.svg>
+    </label>
+    <details class=range-popover>
+      <summary class=toolbar-btn title="filter by inscription number range">Range</summary>
+      <div class=range-fields>
+        <label>from <input type=number name=from value="{{self.from_value()}}" placeholder="0"></label>
+        <label>to <input type=number name=to value="{{self.to_value()}}" placeholder="∞"></label>
+        <button type=submit class=toolbar-btn>apply</button>
+      </div>
+    </details>
+%% if self.index_sats {
+    <label class=toolbar-select>
+      <select name=rarity>
+        <option value=any{{self.selected_rarity_if(Rarity::Any)}}>Satributes</option>
+        <option value=uncommon{{self.selected_rarity_if(Rarity::Uncommon)}}>Uncommon</option>
+        <option value=rare{{self.selected_rarity_if(Rarity::Rare)}}>Rare</option>
+        <option value=epic{{self.selected_rarity_if(Rarity::Epic)}}>Epic</option>
+        <option value=legendary{{self.selected_rarity_if(Rarity::Legendary)}}>Legendary</option>
+        <option value=mythic{{self.selected_rarity_if(Rarity::Mythic)}}>Mythic</option>
+      </select>
+    </label>
+%% }
+    <label class=toolbar-select>
+      <select name=sort>
+        <option value=newest{{self.selected_sort_if(Sort::Newest)}}>Recently Inscribed</option>
+        <option value=oldest{{self.selected_sort_if(Sort::Oldest)}}>Earliest Inscribed</option>
+      </select>
+    </label>
+  </form>
+</div>
 <div class=thumbnails>
 %% for id in &self.inscriptions {
   {{Iframe::thumbnail(*id)}}
@@ -14,12 +40,12 @@
 </div>
 <div class=center>
 %% if let Some(prev) = self.prev {
-<a class=prev href=/inscriptions/{{prev}}{{self.sort_query()}}>prev</a>
+<a class=prev href=/inscriptions/{{prev}}{{self.pagination_query()}}>prev</a>
 %% } else {
 prev
 %% }
 %% if let Some(next) = self.next {
-<a class=next href=/inscriptions/{{next}}{{self.sort_query()}}>next</a>
+<a class=next href=/inscriptions/{{next}}{{self.pagination_query()}}>next</a>
 %% } else {
 next
 %% }

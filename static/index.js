@@ -53,8 +53,10 @@ addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  for (let select of document.querySelectorAll('.sort-form select')) {
-    select.addEventListener('change', () => select.form.submit());
+  for (let form of document.querySelectorAll('.sort-form, .inscriptions-toolbar')) {
+    for (let control of form.querySelectorAll('select, input[type=checkbox]')) {
+      control.addEventListener('change', () => form.submit());
+    }
   }
 
   let themeToggle = document.getElementById('theme-toggle');
