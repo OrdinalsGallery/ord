@@ -60,22 +60,9 @@ enum SpawnConfig {
   Redirect(String),
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize)]
 pub(crate) struct InscriptionsQuery {
   pub(crate) sort: Option<InscriptionsSort>,
-  #[serde(default, deserialize_with = "deserialize_truthy")]
-  pub(crate) cursed: bool,
-  pub(crate) from: Option<i32>,
-  pub(crate) to: Option<i32>,
-  pub(crate) rarity: Option<crate::templates::inscriptions::Rarity>,
-}
-
-fn deserialize_truthy<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
-  let s = Option::<String>::deserialize(d)?.unwrap_or_default();
-  Ok(matches!(
-    s.as_str(),
-    "1" | "true" | "on" | "yes" | "only"
-  ))
 }
 
 #[derive(Deserialize)]
@@ -2564,14 +2551,7 @@ impl Server {
   ) -> ServerResult {
     task::block_in_place(|| {
       let sort = query.sort.unwrap_or_default();
-      let filter = crate::templates::inscriptions::Filter {
-        cursed: query.cursed,
-        from: query.from,
-        to: query.to,
-        rarity: query.rarity.unwrap_or_default(),
-      };
-      let index_sats = server_config.index_sats;
-      let (inscriptions, more) = index.get_inscriptions_paginated(100, page_index, sort, filter)?;
+      let (inscriptions, more) = index.get_inscriptions_paginated(100, page_index, sort)?;
 
       let prev = page_index.checked_sub(1);
 
@@ -2590,8 +2570,6 @@ impl Server {
           next,
           prev,
           sort,
-          filter,
-          index_sats,
         }
         .page(server_config)
         .into_response()

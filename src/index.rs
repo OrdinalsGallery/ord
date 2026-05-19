@@ -2024,7 +2024,6 @@ impl Index {
     page_size: u32,
     page_index: u32,
     sort: crate::templates::inscriptions::Sort,
-    filter: crate::templates::inscriptions::Filter,
   ) -> Result<(Vec<InscriptionId>, bool)> {
     use crate::templates::inscriptions::Sort;
 
@@ -2033,63 +2032,37 @@ impl Index {
     let sequence_number_to_inscription_entry =
       rtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?;
 
-    let unfiltered = filter.is_unfiltered();
+    let mut inscriptions = match sort {
+      Sort::Newest => {
+        let last = sequence_number_to_inscription_entry
+          .iter()?
+          .next_back()
+          .map(|result| result.map(|(number, _entry)| number.value()))
+          .transpose()?
+          .unwrap_or_default();
 
-    let mut skip = (page_index as usize).saturating_mul(page_size as usize);
-    let want = page_size as usize + 1;
-    let mut inscriptions: Vec<InscriptionId> = Vec::with_capacity(want);
+        let start = last.saturating_sub(page_size.saturating_mul(page_index));
+        let end = start.saturating_sub(page_size);
 
-    // Fast path: no filter, use the existing range-based pagination.
-    if unfiltered {
-      match sort {
-        Sort::Newest => {
-          let last = sequence_number_to_inscription_entry
-            .iter()?
-            .next_back()
-            .map(|result| result.map(|(number, _entry)| number.value()))
-            .transpose()?
-            .unwrap_or_default();
-          let start = last.saturating_sub(page_size.saturating_mul(page_index));
-          let end = start.saturating_sub(page_size);
-          inscriptions = sequence_number_to_inscription_entry
-            .range(end..=start)?
-            .rev()
-            .map(|result| result.map(|(_n, e)| InscriptionEntry::load(e.value()).id))
-            .collect::<Result<Vec<_>, StorageError>>()?;
-        }
-        Sort::Oldest => {
-          let start = page_size.saturating_mul(page_index);
-          let end = start.saturating_add(page_size);
-          inscriptions = sequence_number_to_inscription_entry
-            .range(start..=end)?
-            .map(|result| result.map(|(_n, e)| InscriptionEntry::load(e.value()).id))
-            .collect::<Result<Vec<_>, StorageError>>()?;
-        }
+        sequence_number_to_inscription_entry
+          .range(end..=start)?
+          .rev()
+          .map(|result| result.map(|(_number, entry)| InscriptionEntry::load(entry.value()).id))
+          .collect::<Result<Vec<InscriptionId>, StorageError>>()?
       }
-    } else {
-      // Filtered path: walk and apply the filter, skip + take page.
-      let iter: Box<dyn Iterator<Item = _>> = match sort {
-        Sort::Newest => Box::new(sequence_number_to_inscription_entry.iter()?.rev()),
-        Sort::Oldest => Box::new(sequence_number_to_inscription_entry.iter()?),
-      };
-      for result in iter {
-        let (_seq, entry_value) = result?;
-        let entry = InscriptionEntry::load(entry_value.value());
-        if !filter.matches(&entry) {
-          continue;
-        }
-        if skip > 0 {
-          skip -= 1;
-          continue;
-        }
-        inscriptions.push(entry.id);
-        if inscriptions.len() >= want {
-          break;
-        }
+      Sort::Oldest => {
+        let start = page_size.saturating_mul(page_index);
+        let end = start.saturating_add(page_size);
+
+        sequence_number_to_inscription_entry
+          .range(start..=end)?
+          .map(|result| result.map(|(_number, entry)| InscriptionEntry::load(entry.value()).id))
+          .collect::<Result<Vec<InscriptionId>, StorageError>>()?
       }
-    }
+    };
 
     let more = u32::try_from(inscriptions.len()).unwrap_or(u32::MAX) > page_size;
+
     if more {
       inscriptions.pop();
     }
@@ -3968,7 +3941,7 @@ mod tests {
 
       context.mine_blocks(1);
 
-      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0, crate::templates::inscriptions::Sort::Newest, crate::templates::inscriptions::Filter::default()).unwrap();
+      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0, crate::templates::inscriptions::Sort::Newest).unwrap();
       assert_eq!(inscriptions, &[inscription_id]);
       assert!(!more);
     }
@@ -3995,7 +3968,7 @@ mod tests {
 
       assert_eq!(ids.len(), 100);
 
-      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0, crate::templates::inscriptions::Sort::Newest, crate::templates::inscriptions::Filter::default()).unwrap();
+      let (inscriptions, more) = context.index.get_inscriptions_paginated(100, 0, crate::templates::inscriptions::Sort::Newest).unwrap();
       assert_eq!(inscriptions, ids);
       assert!(more);
     }

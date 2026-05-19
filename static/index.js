@@ -54,7 +54,7 @@ addEventListener("DOMContentLoaded", () => {
   }
 
   for (let form of document.querySelectorAll('.sort-form, .inscriptions-toolbar')) {
-    for (let control of form.querySelectorAll('select, input[type=checkbox]')) {
+    for (let control of form.querySelectorAll('select[name=sort]')) {
       control.addEventListener('change', () => form.submit());
     }
   }
