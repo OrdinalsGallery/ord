@@ -12,6 +12,7 @@
 $$ Trusted(self.oembed_link())
     <link rel=icon href=/static/favicon.png>
     <link rel=icon href=/static/favicon.svg>
+    <script src=/static/theme-init.js></script>
     <link rel=stylesheet href=/static/index.css>
     <link rel=stylesheet href=/static/modern-normalize.css>
     <script src=/static/index.js></script>
@@ -21,7 +22,6 @@ $$ Trusted(self.oembed_link())
   <header>
     <nav>
       <a href=/ title=home>Ordinals•Gallery<sup>{{ self.superscript() }}</sup></a>
-      <a id=ordinals-link href=https://ordinals.com title='view on ordinals.com'><img class=icon src=/static/ordinals.svg></a>
       <a href=/inscriptions title=inscriptions><img class=icon src=/static/images.svg></a>
       <a href=/runes title=runes><img class=icon src=/static/rune.svg></a>
       <a href=/collections title=collections><img class=icon src=/static/diagram-project.svg></a>
@@ -36,6 +36,7 @@ $$ Trusted(self.oembed_link())
       <a href=https://docs.ordinals.com/ title=handbook><img class=icon src=/static/book.svg></a>
       <a href=https://github.com/ordinals/ord title=github><img class=icon src=/static/github.svg></a>
       <a href=https://discord.com/invite/ordinals title=discord><img class=icon src=/static/discord.svg></a>
+      <button id=theme-toggle type=button class=nav-button title='switch theme' aria-label='switch theme'><img class=icon src=/static/theme.svg></button>
       <form action=/search method=get>
         <input type=text autocapitalize=off autocomplete=off autocorrect=off name=query spellcheck=false>
         <input class=icon type=image src=/static/magnifying-glass.svg alt=Search>

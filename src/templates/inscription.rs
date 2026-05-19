@@ -352,11 +352,20 @@ mod tests {
         <div>❯</div>
         </div>
         <dl>
-          <dt>children</dt>
+          <dt class=with-toolbar>children
+            <div class=gallery-toolbar>
+              <button class=\"gallery-view-btn active\" type=button data-mode=scroll aria-label=\"strip view\"><img class=icon src=/static/view-strip.svg></button>
+              <button class=gallery-view-btn type=button data-mode=all aria-label=\"grid view\"><img class=icon src=/static/view-grid.svg></button>
+            </div>
+          </dt>
           <dd>
-            <div class=thumbnails>
-              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
-              <a href=/inscription/3{64}i3><iframe .* src=/preview/3{64}i3\\?thumb=1></iframe></a>
+            <div class=\"gallery-row gallery-mode-scroll\" data-gallery-total=\"2\" data-load-more-url=/r/children/1{64}i1>
+              <button class=gallery-prev type=button aria-label=\"previous\">❮</button>
+              <div class=thumbnails>
+                <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
+                <a href=/inscription/3{64}i3><iframe .* src=/preview/3{64}i3\\?thumb=1></iframe></a>
+              </div>
+              <button class=gallery-next type=button aria-label=\"next\">❯</button>
             </div>
             <div class=center>
               <a href=/children/1{64}i1>all \\(2\\)</a>
@@ -420,10 +429,19 @@ mod tests {
         <div>❯</div>
         </div>
         <dl>
-          <dt>children</dt>
+          <dt class=with-toolbar>children
+            <div class=gallery-toolbar>
+              <button class=\"gallery-view-btn active\" type=button data-mode=scroll aria-label=\"strip view\"><img class=icon src=/static/view-strip.svg></button>
+              <button class=gallery-view-btn type=button data-mode=all aria-label=\"grid view\"><img class=icon src=/static/view-grid.svg></button>
+            </div>
+          </dt>
           <dd>
-            <div class=thumbnails>
-              <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
+            <div class=\"gallery-row gallery-mode-scroll\" data-gallery-total=\"1\" data-load-more-url=/r/children/1{64}i1>
+              <button class=gallery-prev type=button aria-label=\"previous\">❮</button>
+              <div class=thumbnails>
+                <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
+              </div>
+              <button class=gallery-next type=button aria-label=\"next\">❯</button>
             </div>
             <div class=center>
               <a href=/children/1{64}i1>all \\(1\\)</a>

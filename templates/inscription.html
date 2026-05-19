@@ -1,10 +1,10 @@
 <h1>Inscription {{ self.number }}</h1>
-%% if let Some(title) = &self.properties.attributes.title {
 <div class=subtitle-row>
+%% if let Some(title) = &self.properties.attributes.title {
   <p class=subtitle>{{ title }}</p>
+%% }
   <div class=title-links></div>
 </div>
-%% }
 <div class=inscription>
 %% if let Some(previous) = self.previous {
 <a class=prev href=/inscription/{{previous}}>❮</a>
@@ -33,12 +33,21 @@
   </dd>
 %% }
 %% if !self.children.is_empty() {
-  <dt>children</dt>
+  <dt class=with-toolbar>children
+    <div class=gallery-toolbar>
+      <button class="gallery-view-btn active" type=button data-mode=scroll aria-label="strip view"><img class=icon src=/static/view-strip.svg></button>
+      <button class=gallery-view-btn type=button data-mode=all aria-label="grid view"><img class=icon src=/static/view-grid.svg></button>
+    </div>
+  </dt>
   <dd>
-    <div class=thumbnails>
+    <div class="gallery-row gallery-mode-scroll" data-gallery-total="{{ self.child_count }}" data-load-more-url="/r/children/{{ self.id }}">
+      <button class=gallery-prev type=button aria-label="previous">❮</button>
+      <div class=thumbnails>
 %% for id in &self.children {
-      {{Iframe::thumbnail(*id)}}
+        {{ Iframe::thumbnail(*id) }}
 %% }
+      </div>
+      <button class=gallery-next type=button aria-label="next">❯</button>
     </div>
     <div class=center>
       <a href=/children/{{self.id}}>all ({{ self.child_count }})</a>

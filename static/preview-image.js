@@ -1,3 +1,7 @@
+if (window !== window.top) {
+  document.documentElement.style.backgroundColor = 'transparent';
+}
+
 function resize() {
   if (
     body.clientWidth * window.devicePixelRatio < img.naturalWidth

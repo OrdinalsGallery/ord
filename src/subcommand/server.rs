@@ -1985,18 +1985,23 @@ impl Server {
 
       let properties = inscription.properties();
 
-      let item = properties
-        .gallery
+      let items = properties.gallery.clone();
+      let item = items
         .get(i)
         .ok_or_not_found(|| format!("gallery {query} item {i}"))?
         .clone();
+      let gallery_title = properties.attributes.title.clone();
+      let total = items.len();
 
       Ok(
         ItemHtml {
           gallery_id: info.id,
           gallery_number: info.number,
+          gallery_title,
           i,
           item,
+          items,
+          total,
         }
         .page(server_config),
       )
@@ -7759,7 +7764,7 @@ next
   }
 
   #[test]
-  fn inscriptions_page_shows_max_four_children() {
+  fn inscriptions_page_shows_all_children() {
     let server = TestServer::builder().chain(Chain::Regtest).build();
     server.mine_blocks(1);
 
@@ -7849,6 +7854,7 @@ next
       StatusCode::OK,
       format!(
         ".*<title>Inscription 0</title>.*
+.*<a href=/inscription/.*><iframe .* src=/preview/.*\\?thumb=1></iframe></a>.*
 .*<a href=/inscription/.*><iframe .* src=/preview/.*\\?thumb=1></iframe></a>.*
 .*<a href=/inscription/.*><iframe .* src=/preview/.*\\?thumb=1></iframe></a>.*
 .*<a href=/inscription/.*><iframe .* src=/preview/.*\\?thumb=1></iframe></a>.*

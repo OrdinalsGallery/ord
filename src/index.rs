@@ -2281,7 +2281,7 @@ impl Index {
     let child_count = all_children.len();
 
     let children = all_children
-      .take(4)
+      .take(100)
       .map(|result| {
         result
           .and_then(|sequence_number| {
