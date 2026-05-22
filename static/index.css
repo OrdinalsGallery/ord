@@ -393,17 +393,17 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 }
 
 .crumb-toggle {
-  align-items: center;
   background: none;
-  border: none;
-  color: inherit;
+  border-left: 0.4em solid transparent;
+  border-right: 0.4em solid transparent;
+  border-top: 0.45em solid currentColor;
   cursor: pointer;
-  display: inline-flex;
-  font-size: 1.4em;
-  line-height: 1;
-  margin-left: 0.1em;
+  display: inline-block;
+  height: 0;
+  margin-left: 0.4em;
   padding: 0;
   vertical-align: middle;
+  width: 0;
 }
 
 .crumb-menu {

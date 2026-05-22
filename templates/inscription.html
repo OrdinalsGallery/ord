@@ -36,7 +36,7 @@
 <span class=current>{{ crumb.title }}</span>
 %% }
 %% if !crumb.reinscriptions.is_empty() {
-<button class=crumb-toggle type=button aria-label=reinscriptions>▾</button>
+<button class=crumb-toggle type=button aria-label=reinscriptions></button>
 <span class=crumb-menu>
 %% for reinscription in &crumb.reinscriptions {
 <a href=/inscription/{{ reinscription.id }}>{{ reinscription.label }}</a>
