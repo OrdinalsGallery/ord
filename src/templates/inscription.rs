@@ -1,9 +1,36 @@
 use {super::*, crate::inscriptions::opus_metadata};
 
 #[derive(Clone, Debug)]
+pub struct SatInscription {
+  pub id: InscriptionId,
+  pub label: String,
+}
+
+#[derive(Clone, Debug)]
 pub struct Crumb {
   pub id: InscriptionId,
   pub title: String,
+  pub reinscriptions: Vec<SatInscription>,
+}
+
+pub fn text_title(inscription: &Inscription) -> Option<String> {
+  const MAX_LEN: usize = 64;
+
+  if inscription.content_encoding().is_some() {
+    return None;
+  }
+
+  if !inscription.content_type()?.starts_with("text/plain") {
+    return None;
+  }
+
+  let text = std::str::from_utf8(inscription.body()?).ok()?.trim();
+
+  if text.is_empty() || text.contains(['\n', '\r']) || text.chars().count() > MAX_LEN {
+    return None;
+  }
+
+  Some(text.to_string())
 }
 
 #[derive(Boilerplate, Default)]
@@ -106,8 +133,9 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
           <div class=title-links></div>
         </div>
         <div class=inscription>
@@ -184,6 +212,51 @@ mod tests {
   }
 
   #[test]
+  fn bitmap_text_used_as_heading() {
+    assert_regex_match!(
+      InscriptionHtml {
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "12345.bitmap"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        <h1>12345.bitmap</h1>
+        <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
+          <div class=title-links></div>
+        </div>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn long_text_keeps_number_heading() {
+    assert_regex_match!(
+      InscriptionHtml {
+        fee: 1,
+        inscription: inscription(
+          "text/plain;charset=utf-8",
+          "this text is far too long to be used as an inscription heading so it is ignored",
+        ),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        <h1>Inscription 1</h1>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
   fn with_breadcrumbs() {
     assert_regex_match!(
       InscriptionHtml {
@@ -191,10 +264,12 @@ mod tests {
           Crumb {
             id: inscription_id(2),
             title: "MoBA".into(),
+            reinscriptions: Vec::new(),
           },
           Crumb {
             id: inscription_id(1),
             title: "Bitcoin Shrooms".into(),
+            reinscriptions: Vec::new(),
           },
         ]],
         fee: 1,
@@ -207,11 +282,56 @@ mod tests {
       "
         .*
         <div class=breadcrumbs>
-        <div class=breadcrumb>
-        <a href=/inscription/2{64}i2>MoBA</a> /
-        <span>Bitcoin Shrooms</span>
-        </div>
-        </div>
+        .*
+        <a href=/inscription/2{64}i2>MoBA</a>
+        .*
+        <span class=current>Bitcoin Shrooms</span>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn breadcrumb_reinscriptions_render_dropdown() {
+    assert_regex_match!(
+      InscriptionHtml {
+        breadcrumbs: vec![vec![
+          Crumb {
+            id: inscription_id(2),
+            title: "MoBA".into(),
+            reinscriptions: vec![
+              SatInscription {
+                id: inscription_id(2),
+                label: "#1".into(),
+              },
+              SatInscription {
+                id: inscription_id(3),
+                label: "12345.bitmap".into(),
+              },
+            ],
+          },
+          Crumb {
+            id: inscription_id(1),
+            title: "Bitcoin Shrooms".into(),
+            reinscriptions: Vec::new(),
+          },
+        ]],
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        .*
+        <a href=/inscription/2{64}i2>MoBA</a>
+        <button class=crumb-toggle type=button aria-label=reinscriptions>.*</button>
+        <span class=crumb-menu>
+        <a href=/inscription/2{64}i2>#1</a>
+        <a href=/inscription/3{64}i3>12345.bitmap</a>
+        </span>
         .*
       "
       .unindent()
@@ -231,8 +351,9 @@ mod tests {
         ..default()
       },
       "
-        .*<h1>Inscription 1</h1>
+        .*<h1>HELLOWORLD</h1>
         <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
           <div class=title-links></div>
         </div>
         <div class=inscription>
@@ -267,7 +388,7 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         .*
         <dl>
           .*
@@ -299,8 +420,9 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
           <div class=title-links></div>
         </div>
         <div class=inscription>
@@ -331,7 +453,7 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription -1</h1>
+        <h1>HELLOWORLD</h1>
         .*
         <dl>
           .*
@@ -359,8 +481,9 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
           <div class=title-links></div>
         </div>
         <div class=inscription>
@@ -429,8 +552,9 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
           <div class=title-links></div>
         </div>
         <div class=inscription>
@@ -509,8 +633,9 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
           <div class=title-links></div>
         </div>
         <div class=inscription>
@@ -590,7 +715,7 @@ mod tests {
         ..default()
       },
       "
-        <h1>Inscription 1</h1>
+        <h1>HELLOWORLD</h1>
         .*
         <dl>
           <dt>rune</dt>

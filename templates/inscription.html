@@ -1,10 +1,12 @@
 %% if let Some(title) = &self.properties.attributes.title {
 <h1>{{ title }}</h1>
+%% } else if let Some(text) = text_title(&self.inscription) {
+<h1>{{ text }}</h1>
 %% } else {
 <h1>Inscription {{ self.number }}</h1>
 %% }
 <div class=subtitle-row>
-%% if self.properties.attributes.title.is_some() {
+%% if self.properties.attributes.title.is_some() || text_title(&self.inscription).is_some() {
   <p class=subtitle>Inscription {{ self.number }}</p>
 %% }
   <div class=title-links></div>
@@ -27,10 +29,23 @@
 %% for trail in &self.breadcrumbs {
 <div class=breadcrumb>
 %% for (i, crumb) in trail.iter().enumerate() {
+<span class=crumb>
 %% if i + 1 < trail.len() {
-<a href=/inscription/{{ crumb.id }}>{{ crumb.title }}</a> /
+<a href=/inscription/{{ crumb.id }}>{{ crumb.title }}</a>
 %% } else {
-<span>{{ crumb.title }}</span>
+<span class=current>{{ crumb.title }}</span>
+%% }
+%% if !crumb.reinscriptions.is_empty() {
+<button class=crumb-toggle type=button aria-label=reinscriptions>▾</button>
+<span class=crumb-menu>
+%% for reinscription in &crumb.reinscriptions {
+<a href=/inscription/{{ reinscription.id }}>{{ reinscription.label }}</a>
+%% }
+</span>
+%% }
+</span>
+%% if i + 1 < trail.len() {
+/
 %% }
 %% }
 </div>

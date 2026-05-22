@@ -31,7 +31,7 @@ pub(crate) use {
 
 pub use {
   blocks::BlocksHtml,
-  inscription::{Crumb, InscriptionHtml},
+  inscription::{text_title, Crumb, InscriptionHtml, SatInscription},
   item::ItemHtml,
   rune::RuneHtml,
   runes::RunesHtml,

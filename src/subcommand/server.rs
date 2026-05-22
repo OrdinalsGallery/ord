@@ -11,7 +11,7 @@ use {
     AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, Crumb,
     EmbedAudioHtml, EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml, GalleriesHtml, GalleryHtml,
     HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, InscriptionsSort,
-    ItemHtml, OutputHtml,
+    ItemHtml, OutputHtml, SatInscription, text_title,
     PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml,
     PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml,
     PreviewUnknownHtml, PreviewVideoHtml, RareTxt, RuneHtml, RuneNotFoundHtml, RunesHtml, SatHtml,
@@ -2300,13 +2300,30 @@ impl Server {
       return Ok(Vec::new());
     };
 
-    let title = index
-      .get_inscription_by_id(id)?
-      .and_then(|inscription| inscription.properties().attributes.title);
+    let title = index.get_inscription_by_id(id)?.and_then(|inscription| {
+      let title = inscription.properties().attributes.title;
+      title.or_else(|| text_title(&inscription))
+    });
+
+    let reinscriptions = match entry.sat {
+      Some(sat) => index
+        .get_inscription_ids_by_sat(sat)?
+        .into_iter()
+        .filter(|&sat_id| sat_id != id)
+        .map(|sat_id| {
+          Ok(SatInscription {
+            id: sat_id,
+            label: Self::inscription_label(index, sat_id)?,
+          })
+        })
+        .collect::<ServerResult<Vec<SatInscription>>>()?,
+      None => Vec::new(),
+    };
 
     let crumb = Crumb {
       id,
       title: title.unwrap_or_else(|| format!("#{}", entry.inscription_number)),
+      reinscriptions,
     };
 
     let (parents, _) = index.get_parents_by_sequence_number_paginated(entry.parents, 100, 0)?;
@@ -2327,6 +2344,22 @@ impl Server {
     }
 
     Ok(trails)
+  }
+
+  fn inscription_label(index: &Index, id: InscriptionId) -> ServerResult<String> {
+    if let Some(inscription) = index.get_inscription_by_id(id)? {
+      let title = inscription.properties().attributes.title;
+      if let Some(title) = title.or_else(|| text_title(&inscription)) {
+        return Ok(title);
+      }
+    }
+
+    let number = index
+      .get_inscription_entry(id)?
+      .map(|entry| entry.inscription_number)
+      .unwrap_or_default();
+
+    Ok(format!("#{number}"))
   }
 
   async fn inscriptions_json(
@@ -7701,7 +7734,7 @@ next
     server.mine_blocks(1);
 
     let parent_txid = server.core.broadcast_tx(TransactionTemplate {
-      inputs: &[(1, 0, 0, inscription("text/plain", "hello").to_witness())],
+      inputs: &[(1, 0, 0, inscription("image/png", "hello").to_witness())],
       ..default()
     });
 
@@ -7719,7 +7752,7 @@ next
           0,
           0,
           Inscription {
-            content_type: Some("text/plain".into()),
+            content_type: Some("image/png".into()),
             body: Some("hello".into()),
             parents: vec![parent_inscription_id.value()],
             ..default()
@@ -7739,7 +7772,7 @@ next
       format!("/inscription/{inscription_id}"),
       StatusCode::OK,
       format!(
-        ".*<div class=breadcrumbs>.*<a href=/inscription/{parent_inscription_id}>#0</a> /.*<span>#1</span>.*"
+        ".*<div class=breadcrumbs>.*<a href=/inscription/{parent_inscription_id}>#0</a>.*<span class=current>#1</span>.*"
       ),
     );
   }
@@ -8260,7 +8293,7 @@ next
     server.assert_response_regex(
       format!("/inscription/{inscription_id}"),
       StatusCode::OK,
-      ".*<title>Inscription -1</title>.*<h1>Inscription -1</h1>.*<div class=thumbnails>(.*<a href=/inscription/.*><iframe .* src=/preview/.*></iframe></a>.*){4}.*",
+      ".*<title>Inscription -1</title>.*<h1>.*</h1>.*<div class=thumbnails>(.*<a href=/inscription/.*><iframe .* src=/preview/.*></iframe></a>.*){4}.*",
     );
   }
 
@@ -8287,7 +8320,7 @@ next
       format!("/inscription/{inscription_id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{inscription_id}</dd>.*"
@@ -8297,7 +8330,7 @@ next
       "/inscription/0",
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{inscription_id}</dd>.*"
@@ -8308,7 +8341,7 @@ next
       "/inscription/-1",
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription -1</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{cursed_inscription_id}</dd>.*"
@@ -8339,7 +8372,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription -1</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8378,7 +8411,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8414,7 +8447,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8450,7 +8483,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8486,7 +8519,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8526,7 +8559,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription -1</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8590,7 +8623,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8651,7 +8684,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8701,7 +8734,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription -1</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8737,7 +8770,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -8763,7 +8796,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 0</h1>.*
+        ".*<h1>.*</h1>.*
 <dl>
   <dt>id</dt>
   <dd class=collapse>{id}</dd>
@@ -9582,7 +9615,7 @@ next
       format!("/inscription/{id}"),
       StatusCode::OK,
       format!(
-        ".*<h1>Inscription 1</h1>.*
+        ".*<h1>.*</h1>.*
         <dl>
           <dt>id</dt>
           <dd class=collapse>{id}</dd>

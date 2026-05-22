@@ -315,6 +315,12 @@ addEventListener("DOMContentLoaded", () => {
       if (width == 0) {
         width = node.parentNode.getBoundingClientRect().width;
       }
+      let container = node.tagName === 'DD' ? node : node.parentNode;
+      let btn = container.querySelector('.copy-btn');
+      if (btn) {
+        let s = window.getComputedStyle(btn);
+        width -= btn.offsetWidth + (parseFloat(s.marginLeft) || 0) + (parseFloat(s.marginRight) || 0);
+      }
       context.font = window.getComputedStyle(node).font;
       let capacity = width / (context.measureText(original).width / length);
       let text;
@@ -352,6 +358,26 @@ addEventListener("DOMContentLoaded", () => {
   document
     .querySelectorAll(`nav a[href="${CSS.escape(window.location.pathname)}"]`)
     .forEach(a => a.classList.add('active'));
+
+  for (let toggle of document.querySelectorAll('.crumb-toggle')) {
+    toggle.addEventListener('click', e => {
+      e.stopPropagation();
+      let menu = toggle.nextElementSibling;
+      let open = menu.classList.contains('open');
+      for (let m of document.querySelectorAll('.crumb-menu.open')) {
+        m.classList.remove('open');
+      }
+      if (!open) {
+        menu.classList.add('open');
+      }
+    });
+  }
+
+  addEventListener('click', () => {
+    for (let m of document.querySelectorAll('.crumb-menu.open')) {
+      m.classList.remove('open');
+    }
+  });
 
   resize();
 });

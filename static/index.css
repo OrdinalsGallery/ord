@@ -278,6 +278,18 @@ a.mythic {
   width: 100%;
 }
 
+@media (max-width: 38rem) {
+  .inscription.gallery-item-nav > *:nth-child(1),
+  .inscription.gallery-item-nav > *:nth-child(3) {
+    font-size: 150%;
+  }
+
+  .inscription.gallery-item-nav > *:nth-child(2) {
+    flex-basis: 70%;
+    min-width: 0;
+  }
+}
+
 .satscard-error {
   color: red;
 }
@@ -354,7 +366,7 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 
 .breadcrumbs {
   font-size: 0.85rem;
-  margin: 0.5rem 0 0;
+  margin: 1.25rem 0 0;
 }
 
 .breadcrumb {
@@ -368,6 +380,58 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 }
 
 .breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb .current {
+  font-weight: bold;
+}
+
+.crumb {
+  position: relative;
+  white-space: nowrap;
+}
+
+.crumb-toggle {
+  align-items: center;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1.4em;
+  line-height: 1;
+  margin-left: 0.1em;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.crumb-menu {
+  background: var(--light-bg);
+  border: 1px solid var(--dark-fg);
+  border-radius: 0.25rem;
+  display: none;
+  left: 0;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0;
+  position: absolute;
+  top: 100%;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.crumb-menu.open {
+  display: block;
+}
+
+.crumb-menu a {
+  color: var(--light-fg);
+  display: block;
+  padding: 0.2rem 0.6rem;
+  text-decoration: none;
+}
+
+.crumb-menu a:hover {
   text-decoration: underline;
 }
 
@@ -618,10 +682,15 @@ dt.with-toolbar {
   width: 8rem;
 }
 
+dd:has(.copy-btn) {
+  white-space: nowrap;
+}
+
 .copy-btn {
   background: none;
   border: none;
   cursor: pointer;
+  flex-shrink: 0;
   margin-left: 0.5em;
   padding: 0;
   vertical-align: middle;
