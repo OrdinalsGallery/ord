@@ -8,9 +8,9 @@ use {
   super::*,
   crate::inscriptions::opus_metadata,
   crate::templates::{
-    AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, EmbedAudioHtml,
-    EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml, GalleriesHtml, GalleryHtml, HomeHtml,
-    InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, InscriptionsSort,
+    AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, Crumb,
+    EmbedAudioHtml, EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml, GalleriesHtml, GalleryHtml,
+    HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, InscriptionsSort,
     ItemHtml, OutputHtml,
     PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml,
     PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml,
@@ -2006,7 +2006,6 @@ impl Server {
           gallery_title,
           i,
           item,
-          items,
           total,
         }
         .page(server_config),
@@ -2253,7 +2252,14 @@ impl Server {
 
         let properties = inscription.properties();
 
+        let breadcrumbs = if info.parents.is_empty() {
+          Vec::new()
+        } else {
+          Self::breadcrumb_trails(&index, info.id, 0)?
+        };
+
         InscriptionHtml {
+          breadcrumbs,
           chain: server_config.chain,
           charms: Charm::Vindicated.unset(info.charms.iter().fold(0, |mut acc, charm| {
             charm.set(&mut acc);
@@ -2280,6 +2286,47 @@ impl Server {
         .into_response()
       })
     })
+  }
+
+  fn breadcrumb_trails(
+    index: &Index,
+    id: InscriptionId,
+    depth: usize,
+  ) -> ServerResult<Vec<Vec<Crumb>>> {
+    const MAX_DEPTH: usize = 10;
+    const MAX_TRAILS: usize = 5;
+
+    let Some(entry) = index.get_inscription_entry(id)? else {
+      return Ok(Vec::new());
+    };
+
+    let title = index
+      .get_inscription_by_id(id)?
+      .and_then(|inscription| inscription.properties().attributes.title);
+
+    let crumb = Crumb {
+      id,
+      title: title.unwrap_or_else(|| format!("#{}", entry.inscription_number)),
+    };
+
+    let (parents, _) = index.get_parents_by_sequence_number_paginated(entry.parents, 100, 0)?;
+
+    if parents.is_empty() || depth >= MAX_DEPTH {
+      return Ok(vec![vec![crumb]]);
+    }
+
+    let mut trails = Vec::new();
+    'outer: for parent in parents {
+      for mut trail in Self::breadcrumb_trails(index, parent, depth + 1)? {
+        trail.push(crumb.clone());
+        trails.push(trail);
+        if trails.len() >= MAX_TRAILS {
+          break 'outer;
+        }
+      }
+    }
+
+    Ok(trails)
   }
 
   async fn inscriptions_json(
@@ -2460,6 +2507,7 @@ impl Server {
         GalleryHtml {
           id,
           number,
+          title: properties.attributes.title.clone(),
           items,
           prev_page,
           next_page,
@@ -7644,6 +7692,55 @@ next
         .get_json::<api::Inscription>(format!("/inscription/{parent_inscription_id}"))
         .children,
       [inscription_id],
+    );
+  }
+
+  #[test]
+  fn inscription_breadcrumb_falls_back_to_number_when_untitled() {
+    let server = TestServer::builder().chain(Chain::Regtest).build();
+    server.mine_blocks(1);
+
+    let parent_txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0, inscription("text/plain", "hello").to_witness())],
+      ..default()
+    });
+
+    server.mine_blocks(1);
+
+    let parent_inscription_id = InscriptionId {
+      txid: parent_txid,
+      index: 0,
+    };
+
+    let txid = server.core.broadcast_tx(TransactionTemplate {
+      inputs: &[
+        (
+          2,
+          0,
+          0,
+          Inscription {
+            content_type: Some("text/plain".into()),
+            body: Some("hello".into()),
+            parents: vec![parent_inscription_id.value()],
+            ..default()
+          }
+          .to_witness(),
+        ),
+        (2, 1, 0, Default::default()),
+      ],
+      ..default()
+    });
+
+    server.mine_blocks(1);
+
+    let inscription_id = InscriptionId { txid, index: 0 };
+
+    server.assert_response_regex(
+      format!("/inscription/{inscription_id}"),
+      StatusCode::OK,
+      format!(
+        ".*<div class=breadcrumbs>.*<a href=/inscription/{parent_inscription_id}>#0</a> /.*<span>#1</span>.*"
+      ),
     );
   }
 

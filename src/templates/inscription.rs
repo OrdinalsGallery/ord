@@ -1,7 +1,14 @@
 use {super::*, crate::inscriptions::opus_metadata};
 
+#[derive(Clone, Debug)]
+pub struct Crumb {
+  pub id: InscriptionId,
+  pub title: String,
+}
+
 #[derive(Boilerplate, Default)]
 pub struct InscriptionHtml {
+  pub breadcrumbs: Vec<Vec<Crumb>>,
   pub chain: Chain,
   pub charms: u16,
   pub child_count: u64,
@@ -100,6 +107,9 @@ mod tests {
       },
       "
         <h1>Inscription 1</h1>
+        <div class=subtitle-row>
+          <div class=title-links></div>
+        </div>
         <div class=inscription>
         <div>❮</div>
         <iframe .* src=/preview/1{64}i1></iframe>
@@ -144,6 +154,71 @@ mod tests {
   }
 
   #[test]
+  fn with_title() {
+    assert_regex_match!(
+      InscriptionHtml {
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        properties: Properties {
+          attributes: Attributes {
+            title: Some("Bitcoin Shrooms".into()),
+            ..default()
+          },
+          ..default()
+        },
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        <h1>Bitcoin Shrooms</h1>
+        <div class=subtitle-row>
+          <p class=subtitle>Inscription 1</p>
+          <div class=title-links></div>
+        </div>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn with_breadcrumbs() {
+    assert_regex_match!(
+      InscriptionHtml {
+        breadcrumbs: vec![vec![
+          Crumb {
+            id: inscription_id(2),
+            title: "MoBA".into(),
+          },
+          Crumb {
+            id: inscription_id(1),
+            title: "Bitcoin Shrooms".into(),
+          },
+        ]],
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        .*
+        <div class=breadcrumbs>
+        <div class=breadcrumb>
+        <a href=/inscription/2{64}i2>MoBA</a> /
+        <span>Bitcoin Shrooms</span>
+        </div>
+        </div>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
   fn with_output() {
     assert_regex_match!(
       InscriptionHtml {
@@ -157,6 +232,9 @@ mod tests {
       },
       "
         .*<h1>Inscription 1</h1>
+        <div class=subtitle-row>
+          <div class=title-links></div>
+        </div>
         <div class=inscription>
         <div>❮</div>
         <iframe .* src=/preview/1{64}i1></iframe>
@@ -222,6 +300,9 @@ mod tests {
       },
       "
         <h1>Inscription 1</h1>
+        <div class=subtitle-row>
+          <div class=title-links></div>
+        </div>
         <div class=inscription>
         <a class=prev href=/inscription/1{64}i1>❮</a>
         <iframe .* src=/preview/2{64}i2></iframe>
@@ -279,6 +360,9 @@ mod tests {
       },
       "
         <h1>Inscription 1</h1>
+        <div class=subtitle-row>
+          <div class=title-links></div>
+        </div>
         <div class=inscription>
         <div>❮</div>
         <iframe .* src=/preview/1{64}i1></iframe>
@@ -346,6 +430,9 @@ mod tests {
       },
       "
         <h1>Inscription 1</h1>
+        <div class=subtitle-row>
+          <div class=title-links></div>
+        </div>
         <div class=inscription>
         <div>❮</div>
         <iframe .* src=/preview/1{64}i1></iframe>
@@ -359,7 +446,7 @@ mod tests {
             </div>
           </dt>
           <dd>
-            <div class=\"gallery-row gallery-mode-scroll\" data-gallery-total=\"2\" data-load-more-url=/r/children/1{64}i1>
+            <div class=\"gallery-row gallery-mode-scroll\" data-gallery-total=\"2\" data-load-more-url=\"/r/children/1{64}i1\">
               <button class=gallery-prev type=button aria-label=\"previous\">❮</button>
               <div class=thumbnails>
                 <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>
@@ -423,6 +510,9 @@ mod tests {
       },
       "
         <h1>Inscription 1</h1>
+        <div class=subtitle-row>
+          <div class=title-links></div>
+        </div>
         <div class=inscription>
         <div>❮</div>
         <iframe .* src=/preview/1{64}i1></iframe>
@@ -436,7 +526,7 @@ mod tests {
             </div>
           </dt>
           <dd>
-            <div class=\"gallery-row gallery-mode-scroll\" data-gallery-total=\"1\" data-load-more-url=/r/children/1{64}i1>
+            <div class=\"gallery-row gallery-mode-scroll\" data-gallery-total=\"1\" data-load-more-url=\"/r/children/1{64}i1\">
               <button class=gallery-prev type=button aria-label=\"previous\">❮</button>
               <div class=thumbnails>
                 <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2\\?thumb=1></iframe></a>

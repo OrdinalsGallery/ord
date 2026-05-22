@@ -1,18 +1,18 @@
+%% if let Some(title) = &self.item.attributes.title {
+<h1>{{ title }}</h1>
+%% } else {
 <h1>Gallery {{ self.gallery_number }} Item {{ self.i }}</h1>
+%% }
 <div class=subtitle-row>
+%% if self.item.attributes.title.is_some() {
   <p class=subtitle><a href=/inscription/{{ self.gallery_id }}>
-%% if let Some(title) = &self.gallery_title {
-{{ title }}
+%% if let Some(gallery_title) = &self.gallery_title {
+{{ gallery_title }}
 %% } else {
 Gallery {{ self.gallery_number }}
 %% }
-</a> /
-%% if let Some(title) = &self.item.attributes.title {
-{{ title }}
-%% } else {
-Item {{ self.i }}
+</a> / Item {{ self.i }}</p>
 %% }
-</p>
   <div class=title-links data-ord-path=/inscription/{{ self.item.id() }}></div>
 </div>
 <div class="inscription gallery-item-nav">
@@ -34,26 +34,4 @@ Item {{ self.i }}
   <dt>gallery</dt>
   <dd><a class=collapse href=/inscription/{{ self.gallery_id }}>{{ self.gallery_id }}</a></dd>
   {{ Trusted(AttributesHtml(&self.item.attributes)) }}
-%% if !self.items.is_empty() {
-  <dt class=with-toolbar>items
-    <div class=gallery-toolbar>
-      <button class="gallery-view-btn active" type=button data-mode=scroll aria-label="strip view"><img class=icon src=/static/view-strip.svg></button>
-      <button class=gallery-view-btn type=button data-mode=all aria-label="grid view"><img class=icon src=/static/view-grid.svg></button>
-    </div>
-  </dt>
-  <dd>
-    <div class="gallery-row gallery-mode-scroll" data-gallery-total="{{ self.items.len() }}">
-      <button class=gallery-prev type=button aria-label="previous">❮</button>
-      <div class=thumbnails>
-%% for (idx, gitem) in self.items.iter().enumerate() {
-        {{ Iframe::item(self.gallery_id, idx, gitem.id()) }}
-%% }
-      </div>
-      <button class=gallery-next type=button aria-label="next">❯</button>
-    </div>
-    <div class=center>
-      <a href=/gallery/{{self.gallery_id}}>all ({{ self.items.len() }})</a>
-    </div>
-  </dd>
-%% }
 </dl>

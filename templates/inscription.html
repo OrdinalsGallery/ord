@@ -1,7 +1,11 @@
-<h1>Inscription {{ self.number }}</h1>
-<div class=subtitle-row>
 %% if let Some(title) = &self.properties.attributes.title {
-  <p class=subtitle>{{ title }}</p>
+<h1>{{ title }}</h1>
+%% } else {
+<h1>Inscription {{ self.number }}</h1>
+%% }
+<div class=subtitle-row>
+%% if self.properties.attributes.title.is_some() {
+  <p class=subtitle>Inscription {{ self.number }}</p>
 %% }
   <div class=title-links></div>
 </div>
@@ -18,6 +22,21 @@
 <div>❯</div>
 %% }
 </div>
+%% if !self.breadcrumbs.is_empty() {
+<div class=breadcrumbs>
+%% for trail in &self.breadcrumbs {
+<div class=breadcrumb>
+%% for (i, crumb) in trail.iter().enumerate() {
+%% if i + 1 < trail.len() {
+<a href=/inscription/{{ crumb.id }}>{{ crumb.title }}</a> /
+%% } else {
+<span>{{ crumb.title }}</span>
+%% }
+%% }
+</div>
+%% }
+</div>
+%% }
 <dl>
 %% if !&self.parents.is_empty() {
   <dt>parents</dt>

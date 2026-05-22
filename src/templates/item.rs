@@ -7,7 +7,6 @@ pub struct ItemHtml {
   pub gallery_title: Option<String>,
   pub i: usize,
   pub item: Item,
-  pub items: Vec<Item>,
   pub total: usize,
 }
 
@@ -48,12 +47,11 @@ mod tests {
           },
           index: None,
         },
-        items: vec![],
       },
       "
-        <h1>Gallery 1 Item 2</h1>
+        <h1>foo</h1>
         <div class=subtitle-row>
-          <p class=subtitle><a href=/inscription/2{64}i2>\\s*Bar\\s*</a> /\\s*foo\\s*</p>
+          <p class=subtitle><a href=/inscription/2{64}i2>\\s*Bar\\s*</a> / Item 2</p>
           <div class=title-links data-ord-path=/inscription/1{64}i1></div>
         </div>
         <div class=\"inscription gallery-item-nav\">
@@ -76,6 +74,32 @@ mod tests {
   }
 
   #[test]
+  fn body_without_item_title() {
+    assert_regex_match!(
+      ItemHtml {
+        gallery_id: inscription_id(2),
+        gallery_number: 1,
+        gallery_title: Some("Bar".into()),
+        i: 2,
+        total: 5,
+        item: Item {
+          id: Some(inscription_id(1)),
+          attributes: Attributes::default(),
+          index: None,
+        },
+      },
+      "
+        <h1>Gallery 1 Item 2</h1>
+        <div class=subtitle-row>
+          <div class=title-links data-ord-path=/inscription/1{64}i1></div>
+        </div>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
   fn title() {
     assert_eq!(
       ItemHtml {
@@ -92,7 +116,6 @@ mod tests {
           },
           index: None,
         },
-        items: vec![],
       }
       .title(),
       "Bar / foo",

@@ -30,8 +30,13 @@ pub(crate) use {
 };
 
 pub use {
-  blocks::BlocksHtml, inscription::InscriptionHtml, item::ItemHtml, rune::RuneHtml,
-  runes::RunesHtml, status::StatusHtml, transaction::TransactionHtml,
+  blocks::BlocksHtml,
+  inscription::{Crumb, InscriptionHtml},
+  item::ItemHtml,
+  rune::RuneHtml,
+  runes::RunesHtml,
+  status::StatusHtml,
+  transaction::TransactionHtml,
 };
 
 pub mod address;
