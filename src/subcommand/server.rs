@@ -4831,7 +4831,7 @@ mod tests {
       .assert_response_regex(
         "/",
         StatusCode::OK,
-        ".*<a href=/ title=home>Ordinals<sup>regtest</sup></a>.*",
+        ".*<a href=/ title=home>Ordinals\\.Gallery<sup>regtest</sup></a>.*",
       );
   }
 
