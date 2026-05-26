@@ -2320,27 +2320,24 @@ impl Server {
       None => Vec::new(),
     };
 
-    // Children only for parent crumbs (depth > 0); the current page's
-    // children are already rendered in the page body, so we don't repeat
-    // them in its own breadcrumb dropdown.
-    let (children, more_children) = if depth == 0 {
-      (Vec::new(), false)
-    } else {
-      let (child_ids, _) =
-        index.get_children_by_sequence_number_paginated(entry.sequence_number, 21, 0)?;
-      let more = child_ids.len() > 20;
-      let children = child_ids
-        .into_iter()
-        .take(20)
-        .map(|child_id| {
-          Ok(SatInscription {
-            id: child_id,
-            label: Self::inscription_label(index, child_id)?,
-          })
+    // Children for every crumb in the trail, including the current
+    // inscription itself. (We initially skipped children for the current
+    // crumb because the page body already lists them, but that omission
+    // felt arbitrary — the dropdown is a navigation shortcut, and not
+    // having it on the current crumb only made the trail asymmetric.)
+    let (child_ids, _) =
+      index.get_children_by_sequence_number_paginated(entry.sequence_number, 21, 0)?;
+    let more_children = child_ids.len() > 20;
+    let children = child_ids
+      .into_iter()
+      .take(20)
+      .map(|child_id| {
+        Ok(SatInscription {
+          id: child_id,
+          label: Self::inscription_label(index, child_id)?,
         })
-        .collect::<ServerResult<Vec<SatInscription>>>()?;
-      (children, more)
-    };
+      })
+      .collect::<ServerResult<Vec<SatInscription>>>()?;
 
     let crumb = Crumb {
       id,
