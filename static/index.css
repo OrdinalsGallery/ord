@@ -220,15 +220,9 @@ a.mythic {
 }
 
 .thumbnails > a {
-  border-radius: 2%;
-  border: 1px solid #222;
   margin: 1%;
   overflow: hidden;
   width: 23%;
-}
-
-.thumbnails > a:hover {
-  border-color: #444;
 }
 
 .thumbnails iframe {
@@ -868,10 +862,3 @@ dd:has(.copy-btn) {
   border-color: #000;
 }
 
-:root[data-theme=light] .thumbnails > a {
-  border-color: #ddd;
-}
-
-:root[data-theme=light] .thumbnails > a:hover {
-  border-color: #aaa;
-}
