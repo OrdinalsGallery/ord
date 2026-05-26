@@ -23,34 +23,110 @@ addEventListener("DOMContentLoaded", () => {
         break;
       }
     }
-    let x = null, website = null;
-    for (let u of urls) {
-      let host = u.hostname.replace(/^www\./, '');
-      if (!x && (host === 'x.com' || host === 'twitter.com')) x = u.href;
-      else if (!website && host !== 'x.com' && host !== 'twitter.com') website = u.href;
-    }
-    let entries = [];
-    if (website) entries.push({href: website, src: '/static/link.svg', label: 'website'});
-    if (x) entries.push({href: x, src: '/static/x.svg', label: 'X'});
-    let ordPath = titleLinks.dataset.ordPath || (location.pathname + location.search);
-    entries.push({
-      href: 'https://ordinals.com' + ordPath,
-      src: '/static/ordinals.svg',
-      label: 'view on ordinals.com',
-    });
-    for (let e of entries) {
+    // Title-link factories — 1 link renders as a direct anchor; 2+ render as
+    // icon + caret + dropdown menu. Used uniformly for marketplace, website,
+    // and X icons so adding a new multi-link kind is just another call.
+    function makeDirect(src, alt, label, href) {
       let a = document.createElement('a');
-      a.href = e.href;
+      a.href = href;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
-      a.title = e.label;
+      a.title = label;
       let img = document.createElement('img');
       img.className = 'icon';
-      img.src = e.src;
-      img.alt = e.label;
+      img.src = src;
+      img.alt = alt;
       a.appendChild(img);
-      titleLinks.appendChild(a);
+      return a;
     }
+
+    function makeDropdown(src, alt, label, items) {
+      let wrap = document.createElement('span');
+      wrap.className = 'title-dropdown';
+      let toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'title-dropdown-toggle';
+      toggle.title = label;
+      let img = document.createElement('img');
+      img.className = 'icon';
+      img.src = src;
+      img.alt = alt;
+      toggle.appendChild(img);
+      let caret = document.createElement('span');
+      caret.className = 'title-dropdown-caret';
+      toggle.appendChild(caret);
+      let menu = document.createElement('div');
+      menu.className = 'title-dropdown-menu';
+      for (let item of items) {
+        let a = document.createElement('a');
+        a.href = item.href;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = item.name;
+        menu.appendChild(a);
+      }
+      toggle.addEventListener('click', e => {
+        e.stopPropagation();
+        let isOpen = menu.classList.contains('open');
+        for (let m of document.querySelectorAll('.crumb-menu.open, .title-dropdown-menu.open')) {
+          m.classList.remove('open');
+        }
+        if (!isOpen) menu.classList.add('open');
+      });
+      wrap.appendChild(toggle);
+      wrap.appendChild(menu);
+      return wrap;
+    }
+
+    // Marketplace items — off-chain (see marketplaces.js). Slugs vary per
+    // marketplace, so this is hand-maintained, not derived from on-chain data.
+    let mItems = [];
+    let mIdMatch = location.pathname.match(/\/inscription\/([0-9a-f]{64}i\d+)/);
+    let mSlugs = mIdMatch
+      && typeof GALLERY_MARKETPLACES !== 'undefined'
+      && GALLERY_MARKETPLACES[mIdMatch[1]];
+    if (mSlugs && typeof MARKETPLACES !== 'undefined') {
+      for (let key of Object.keys(MARKETPLACES)) {
+        if (mSlugs[key]) {
+          mItems.push({name: MARKETPLACES[key].name, href: MARKETPLACES[key].base + mSlugs[key]});
+        }
+      }
+    }
+
+    // Group on-chain links from the inscription's `links` attribute.
+    let websites = [], xLinks = [];
+    for (let u of urls) {
+      let host = u.hostname.replace(/^www\./, '');
+      if (host === 'x.com' || host === 'twitter.com') xLinks.push(u);
+      else websites.push(u);
+    }
+
+    // Render order: marketplace, website(s), X, ordinals.com.
+    if (mItems.length === 1) {
+      titleLinks.appendChild(makeDirect('/static/marketplace.svg', 'marketplace', mItems[0].name, mItems[0].href));
+    } else if (mItems.length > 1) {
+      titleLinks.appendChild(makeDropdown('/static/marketplace.svg', 'marketplaces', 'marketplaces', mItems));
+    }
+
+    if (websites.length === 1) {
+      titleLinks.appendChild(makeDirect('/static/link.svg', 'website', 'website', websites[0].href));
+    } else if (websites.length > 1) {
+      let items = websites.map(u => ({name: u.hostname.replace(/^www\./, ''), href: u.href}));
+      titleLinks.appendChild(makeDropdown('/static/link.svg', 'websites', 'websites', items));
+    }
+
+    if (xLinks.length === 1) {
+      titleLinks.appendChild(makeDirect('/static/x.svg', 'X', 'X', xLinks[0].href));
+    } else if (xLinks.length > 1) {
+      let items = xLinks.map(u => {
+        let handle = (u.pathname.split('/').filter(Boolean)[0]) || u.hostname;
+        return {name: '@' + handle, href: u.href};
+      });
+      titleLinks.appendChild(makeDropdown('/static/x.svg', 'X accounts', 'X accounts', items));
+    }
+
+    let ordPath = titleLinks.dataset.ordPath || (location.pathname + location.search);
+    titleLinks.appendChild(makeDirect('/static/ordinals.svg', 'view on ordinals.com', 'view on ordinals.com', 'https://ordinals.com' + ordPath));
   }
 
   for (let form of document.querySelectorAll('.sort-form, .inscriptions-toolbar')) {
@@ -61,17 +137,12 @@ addEventListener("DOMContentLoaded", () => {
 
   let themeToggle = document.getElementById('theme-toggle');
   if (themeToggle) {
-    const THEMES = ['ord', 'light', 'dark'];
+    const THEMES = ['dark', 'light'];
     themeToggle.addEventListener('click', () => {
-      let current = document.documentElement.getAttribute('data-theme') || 'ord';
+      let current = document.documentElement.getAttribute('data-theme') || 'dark';
       let next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
-      if (next === 'ord') {
-        document.documentElement.removeAttribute('data-theme');
-        localStorage.removeItem('theme');
-      } else {
-        document.documentElement.setAttribute('data-theme', next);
-        localStorage.setItem('theme', next);
-      }
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
     });
   }
 
@@ -374,7 +445,7 @@ addEventListener("DOMContentLoaded", () => {
   }
 
   addEventListener('click', () => {
-    for (let m of document.querySelectorAll('.crumb-menu.open')) {
+    for (let m of document.querySelectorAll('.crumb-menu.open, .title-dropdown-menu.open')) {
       m.classList.remove('open');
     }
   });

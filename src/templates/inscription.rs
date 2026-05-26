@@ -11,6 +11,8 @@ pub struct Crumb {
   pub id: InscriptionId,
   pub title: String,
   pub reinscriptions: Vec<SatInscription>,
+  pub children: Vec<SatInscription>,
+  pub more_children: bool,
 }
 
 pub fn text_title(inscription: &Inscription) -> Option<String> {
@@ -265,11 +267,15 @@ mod tests {
             id: inscription_id(2),
             title: "MoBA".into(),
             reinscriptions: Vec::new(),
+            children: Vec::new(),
+            more_children: false,
           },
           Crumb {
             id: inscription_id(1),
             title: "Bitcoin Shrooms".into(),
             reinscriptions: Vec::new(),
+            children: Vec::new(),
+            more_children: false,
           },
         ]],
         fee: 1,
@@ -310,11 +316,15 @@ mod tests {
                 label: "12345.bitmap".into(),
               },
             ],
+            children: Vec::new(),
+            more_children: false,
           },
           Crumb {
             id: inscription_id(1),
             title: "Bitcoin Shrooms".into(),
             reinscriptions: Vec::new(),
+            children: Vec::new(),
+            more_children: false,
           },
         ]],
         fee: 1,
@@ -331,6 +341,109 @@ mod tests {
         <span class=crumb-menu>
         <a href=/inscription/2{64}i2>#1</a>
         <a href=/inscription/3{64}i3>12345.bitmap</a>
+        </span>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn breadcrumb_children_render_dropdown() {
+    assert_regex_match!(
+      InscriptionHtml {
+        breadcrumbs: vec![vec![
+          Crumb {
+            id: inscription_id(2),
+            title: "MoBA".into(),
+            reinscriptions: Vec::new(),
+            children: vec![
+              SatInscription {
+                id: inscription_id(4),
+                label: "Sound Gallery".into(),
+              },
+              SatInscription {
+                id: inscription_id(5),
+                label: "Image Gallery".into(),
+              },
+            ],
+            more_children: false,
+          },
+          Crumb {
+            id: inscription_id(1),
+            title: "Bitcoin Shrooms".into(),
+            reinscriptions: Vec::new(),
+            children: Vec::new(),
+            more_children: false,
+          },
+        ]],
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        .*
+        <a href=/inscription/2{64}i2>MoBA</a>
+        <button class=crumb-toggle type=button aria-label=reinscriptions>.*</button>
+        <span class=crumb-menu>
+        <a href=/inscription/4{64}i4>Sound Gallery</a>
+        <a href=/inscription/5{64}i5>Image Gallery</a>
+        </span>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn breadcrumb_combines_reinscriptions_and_children_with_more() {
+    assert_regex_match!(
+      InscriptionHtml {
+        breadcrumbs: vec![vec![
+          Crumb {
+            id: inscription_id(2),
+            title: "MoBA".into(),
+            reinscriptions: vec![
+              SatInscription {
+                id: inscription_id(3),
+                label: "12345.bitmap".into(),
+              },
+            ],
+            children: vec![
+              SatInscription {
+                id: inscription_id(4),
+                label: "Sound Gallery".into(),
+              },
+            ],
+            more_children: true,
+          },
+          Crumb {
+            id: inscription_id(1),
+            title: "Bitcoin Shrooms".into(),
+            reinscriptions: Vec::new(),
+            children: Vec::new(),
+            more_children: false,
+          },
+        ]],
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        .*
+        <a href=/inscription/2{64}i2>MoBA</a>
+        <button class=crumb-toggle type=button aria-label=reinscriptions>.*</button>
+        <span class=crumb-menu>
+        <a href=/inscription/3{64}i3>12345.bitmap</a>
+        <div class=crumb-menu-divider></div>
+        <a href=/inscription/4{64}i4>Sound Gallery</a>
+        <a href=/children/2{64}i2>all children</a>
         </span>
         .*
       "

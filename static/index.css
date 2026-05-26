@@ -364,6 +364,60 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
   width: 1.1rem;
 }
 
+.title-links > .title-dropdown {
+  align-items: center;
+  display: inline-flex;
+  position: relative;
+}
+
+.title-dropdown-toggle {
+  align-items: center;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0;
+}
+
+.title-dropdown-caret {
+  border-left: 0.3em solid transparent;
+  border-right: 0.3em solid transparent;
+  border-top: 0.35em solid currentColor;
+  display: inline-block;
+  height: 0;
+  width: 0;
+}
+
+.title-dropdown-menu {
+  background: var(--light-bg);
+  border: 1px solid var(--dark-fg);
+  border-radius: 0.25rem;
+  display: none;
+  margin-top: 0.25rem;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 5;
+}
+
+.title-dropdown-menu.open {
+  display: block;
+}
+
+.title-dropdown-menu a {
+  color: var(--light-fg);
+  display: block;
+  padding: 0.2rem 0.6rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.title-dropdown-menu a:hover {
+  text-decoration: underline;
+}
+
 .breadcrumbs {
   font-size: 0.85rem;
   margin: 1.25rem 0 0;
@@ -435,6 +489,12 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 
 .crumb-menu a:hover {
   text-decoration: underline;
+}
+
+.crumb-menu-divider {
+  border-top: 1px solid var(--light-fg);
+  margin: 0.25rem 0;
+  opacity: 0.4;
 }
 
 .gallery-row {

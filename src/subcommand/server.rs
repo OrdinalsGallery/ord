@@ -1831,7 +1831,7 @@ impl Server {
           .ok_or_not_found(|| format!("delegate {inscription_id}"))?
       }
 
-      let media = inscription.media();
+      let media = inscription.sniffed_media();
 
       if let Media::Iframe = media {
         return Ok(
@@ -2320,10 +2320,34 @@ impl Server {
       None => Vec::new(),
     };
 
+    // Children only for parent crumbs (depth > 0); the current page's
+    // children are already rendered in the page body, so we don't repeat
+    // them in its own breadcrumb dropdown.
+    let (children, more_children) = if depth == 0 {
+      (Vec::new(), false)
+    } else {
+      let (child_ids, _) =
+        index.get_children_by_sequence_number_paginated(entry.sequence_number, 21, 0)?;
+      let more = child_ids.len() > 20;
+      let children = child_ids
+        .into_iter()
+        .take(20)
+        .map(|child_id| {
+          Ok(SatInscription {
+            id: child_id,
+            label: Self::inscription_label(index, child_id)?,
+          })
+        })
+        .collect::<ServerResult<Vec<SatInscription>>>()?;
+      (children, more)
+    };
+
     let crumb = Crumb {
       id,
       title: title.unwrap_or_else(|| format!("#{}", entry.inscription_number)),
       reinscriptions,
+      children,
+      more_children,
     };
 
     let (parents, _) = index.get_parents_by_sequence_number_paginated(entry.parents, 100, 0)?;

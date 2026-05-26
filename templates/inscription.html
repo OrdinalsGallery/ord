@@ -35,11 +35,20 @@
 %% } else {
 <span class=current>{{ crumb.title }}</span>
 %% }
-%% if !crumb.reinscriptions.is_empty() {
+%% if !crumb.reinscriptions.is_empty() || !crumb.children.is_empty() {
 <button class=crumb-toggle type=button aria-label=reinscriptions></button>
 <span class=crumb-menu>
 %% for reinscription in &crumb.reinscriptions {
 <a href=/inscription/{{ reinscription.id }}>{{ reinscription.label }}</a>
+%% }
+%% if !crumb.reinscriptions.is_empty() && !crumb.children.is_empty() {
+<div class=crumb-menu-divider></div>
+%% }
+%% for child in &crumb.children {
+<a href=/inscription/{{ child.id }}>{{ child.label }}</a>
+%% }
+%% if crumb.more_children {
+<a href=/children/{{ crumb.id }}>all children</a>
 %% }
 </span>
 %% }
