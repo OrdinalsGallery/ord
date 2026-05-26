@@ -430,19 +430,291 @@ addEventListener("DOMContentLoaded", () => {
     .querySelectorAll(`nav a[href="${CSS.escape(window.location.pathname)}"]`)
     .forEach(a => a.classList.add('active'));
 
-  for (let toggle of document.querySelectorAll('.crumb-toggle')) {
-    toggle.addEventListener('click', e => {
-      e.stopPropagation();
-      let menu = toggle.nextElementSibling;
-      let open = menu.classList.contains('open');
-      for (let m of document.querySelectorAll('.crumb-menu.open')) {
-        m.classList.remove('open');
-      }
-      if (!open) {
-        menu.classList.add('open');
-      }
-    });
-  }
+  // ====================================================================
+  //  Breadcrumb enhancements: nested-tree restructure, popout dropdowns,
+  //  horizontal scroll with affordance fade.
+  //
+  //  The server renders breadcrumbs as a flat .breadcrumb-fork with one
+  //  row per parent trail. The IIFE below progressively enhances that:
+  //
+  //    1. NESTED TREE  — when multiple trails share a leading crumb
+  //       (e.g. .../MoBA/Inscription Clubs/Sub 1k and
+  //              .../MoBA/Inscription Clubs/Sub-10k), collapse the shared
+  //       "Inscription Clubs" into one row containing a sub-fork for the
+  //       divergent tails. Recurses for deeper sharing. Renders an inline
+  //       <svg> branch on the left of every fork level so the structure
+  //       reads as one continuous shape.
+  //
+  //    2. POPOUT DROPDOWNS — the .breadcrumbs container uses overflow-x:
+  //       auto so the breadcrumb can scroll horizontally on narrow
+  //       viewports without reflowing. That overflow context would
+  //       otherwise vertically clip each .crumb-menu when it opens, so
+  //       every menu is moved to document.body and re-positioned
+  //       position: fixed at the toggle's viewport rect. Position is
+  //       viewport-clamped — menus near the left drop down-right, menus
+  //       near the right drop down-left, neither overflows. Any scroll
+  //       closes them so they never float around detached from a toggle.
+  //
+  //    3. SCROLL FADE — mask-image on .breadcrumbs fades the right edge
+  //       when there's more content to scroll, and the left edge once
+  //       scrolled past the start, as a swipe affordance.
+  //
+  //  All of this is progressive: if the JS doesn't run, the server's
+  //  flat breadcrumb still renders fine.
+  // ====================================================================
+
+  (function setupBreadcrumb() {
+    const breadcrumbs = document.querySelector('.breadcrumbs');
+    if (!breadcrumbs) return;
+
+    const originalFork = breadcrumbs.querySelector('.breadcrumb-fork');
+    if (originalFork) nestForkAndAddSvgBranches(originalFork);
+    setupCrumbDropdownPopout(breadcrumbs);
+    setupScrollFade(breadcrumbs);
+
+    // ----- 1. Nested tree restructure + SVG branches -----------------
+
+    function nestForkAndAddSvgBranches(originalFork) {
+      const idOf = crumb => {
+        const link = crumb.querySelector('a[href^="/inscription/"]');
+        return link
+          ? link.getAttribute('href').slice('/inscription/'.length)
+          : null;
+      };
+
+      // Each fork row -> array of { id, element } crumbs.
+      const trails = Array
+        .from(originalFork.querySelectorAll(':scope > .breadcrumb-fork-row'))
+        .map(row => Array
+          .from(row.querySelectorAll(':scope > .crumb'))
+          .map(c => ({ id: idOf(c), element: c })));
+
+      if (trails.length < 2) return;
+
+      // Recursively group trails by their leading crumb id. Single-trail
+      // groups become leaves; multi-trail groups factor out their longest
+      // common prefix and recurse on the divergent tails.
+      const buildTree = trails => {
+        if (trails.length === 0) return [];
+        if (trails.length === 1) return [{ type: 'leaf', crumbs: trails[0] }];
+
+        const groups = [];
+        for (const trail of trails) {
+          if (trail.length === 0) continue;
+          const id = trail[0].id;
+          let g = groups.find(g => g.id === id);
+          if (!g) { g = { id, trails: [] }; groups.push(g); }
+          g.trails.push(trail);
+        }
+
+        const nodes = [];
+        for (const { trails: gTrails } of groups) {
+          if (gTrails.length === 1) {
+            nodes.push({ type: 'leaf', crumbs: gTrails[0] });
+            continue;
+          }
+          let prefixLen = 0;
+          const minLen = Math.min(...gTrails.map(t => t.length));
+          while (prefixLen < minLen
+            && gTrails.every(t => t[prefixLen].id === gTrails[0][prefixLen].id)) {
+            prefixLen++;
+          }
+          const sharedPrefix = gTrails[0].slice(0, prefixLen);
+          const subTrails = gTrails
+            .map(t => t.slice(prefixLen))
+            .filter(t => t.length > 0);
+          nodes.push({
+            type: 'branch',
+            prefix: sharedPrefix,
+            children: subTrails.length > 0 ? buildTree(subTrails) : [],
+          });
+        }
+        return nodes;
+      };
+
+      const tree = buildTree(trails);
+
+      // Build the nested DOM. At each fork level a .breadcrumb-tree-group
+      // wraps an <svg> branch + its .breadcrumb-fork. allGroups is filled
+      // bottom-up by the recursion, so we can compute SVG paths after
+      // layout in insertion order (innermost first).
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const STEM_FRACTION = 0.45; // x-position of the junction inside the SVG
+      const allGroups = [];
+
+      const renderForkGroup = nodes => {
+        const fork = document.createElement('div');
+        fork.className = 'breadcrumb-fork';
+
+        nodes.forEach(node => {
+          const row = document.createElement('div');
+          row.className = 'breadcrumb-fork-row';
+          row.appendChild(document.createTextNode('/'));
+          const inline = node.type === 'leaf' ? node.crumbs : node.prefix;
+          inline.forEach((c, i) => {
+            if (i > 0) row.appendChild(document.createTextNode('/'));
+            row.appendChild(c.element);
+          });
+          if (node.type === 'branch' && node.children.length > 0) {
+            row.appendChild(renderForkGroup(node.children));
+          }
+          fork.appendChild(row);
+        });
+
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.classList.add('breadcrumb-tree-branch');
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('stroke', 'currentColor');
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('vector-effect', 'non-scaling-stroke');
+        path.setAttribute('stroke-linecap', 'square');
+        path.setAttribute('stroke-linejoin', 'miter');
+        svg.appendChild(path);
+
+        const group = document.createElement('span');
+        group.className = 'breadcrumb-tree-group';
+        group.appendChild(svg);
+        group.appendChild(fork);
+
+        allGroups.push({ fork, svg, path });
+        return group;
+      };
+
+      const outerGroup = renderForkGroup(tree);
+      originalFork.parentNode.replaceChild(outerGroup, originalFork);
+
+      // Set each SVG path. Arm y-positions are measured against actual row
+      // positions so they line up on each row's vertical centre even when
+      // one row is taller than its siblings (e.g. a branch row whose
+      // content includes a sub-fork-group).
+      const jx = STEM_FRACTION * 100;
+      allGroups.forEach(({ fork, svg, path }) => {
+        const forkRect = fork.getBoundingClientRect();
+        const forkHeight = forkRect.height;
+        if (forkHeight === 0) return;
+        svg.style.height = forkHeight + 'px';
+        let d = `M0 50 H${jx}`;
+        const rows = Array
+          .from(fork.querySelectorAll(':scope > .breadcrumb-fork-row'));
+        rows.forEach(row => {
+          const rowRect = row.getBoundingClientRect();
+          const centerY = (rowRect.top + rowRect.bottom) / 2 - forkRect.top;
+          const yPct = (centerY / forkHeight) * 100;
+          d += ` M${jx} 50 L${jx} ${yPct} L100 ${yPct}`;
+        });
+        path.setAttribute('d', d);
+      });
+    }
+
+    // ----- 2. Dropdown popout ----------------------------------------
+
+    function setupCrumbDropdownPopout(breadcrumbs) {
+      const menuPairs = [];
+
+      breadcrumbs.querySelectorAll('.crumb-toggle').forEach(originalToggle => {
+        const menu = originalToggle.nextElementSibling;
+        if (!menu || !menu.classList.contains('crumb-menu')) return;
+
+        // Preserve inherited color/font before pulling the menu out of
+        // .breadcrumb (where `color: inherit` gives the breadcrumb's muted
+        // tone; out in body it would otherwise pick up the default link
+        // colour).
+        const cs = window.getComputedStyle(menu);
+        const inheritedColor = cs.color;
+        const inheritedFont = cs.fontFamily;
+        const inheritedSize = cs.fontSize;
+
+        // Clone the toggle to drop any prior click handler (the global
+        // outside-click listener still applies — see below), so we own the
+        // open/close + positioning fully.
+        const toggle = originalToggle.cloneNode(true);
+        originalToggle.parentNode.replaceChild(toggle, originalToggle);
+
+        // Move the menu to body so no overflow ancestor can clip it.
+        document.body.appendChild(menu);
+        menu.style.color = inheritedColor;
+        menu.style.fontFamily = inheritedFont;
+        menu.style.fontSize = inheritedSize;
+        menu.querySelectorAll('a').forEach(a => {
+          a.style.color = 'inherit';
+          a.style.textDecoration = 'none';
+        });
+
+        const positionMenu = () => {
+          const rect = toggle.getBoundingClientRect();
+          const margin = 8;
+          const vw = window.innerWidth;
+          menu.style.position = 'fixed';
+          menu.style.zIndex = '1000';
+          menu.style.top = (rect.bottom + 4) + 'px';
+          // Default: drop down-right, align menu's left with toggle's left.
+          menu.style.left = rect.left + 'px';
+          menu.style.right = 'auto';
+          const mw = menu.offsetWidth;
+          if (rect.left + mw > vw - margin) {
+            // Wouldn't fit going right — try right-align (drop down-left).
+            menu.style.left = 'auto';
+            menu.style.right = (vw - rect.right) + 'px';
+            if (rect.right - mw < margin) {
+              // Wouldn't fit either way — clamp to viewport with margin.
+              menu.style.left = margin + 'px';
+              menu.style.right = 'auto';
+            }
+          }
+        };
+
+        toggle.addEventListener('click', e => {
+          e.stopPropagation();
+          const wasOpen = menu.classList.contains('open');
+          document
+            .querySelectorAll('.crumb-menu.open, .title-dropdown-menu.open')
+            .forEach(m => m.classList.remove('open'));
+          if (!wasOpen) {
+            menu.classList.add('open');
+            positionMenu();
+          }
+        });
+        menuPairs.push({ toggle, menu });
+      });
+
+      // Any scroll closes any open menu so it never floats around detached
+      // from its toggle.
+      const closeAll = () =>
+        menuPairs.forEach(({ menu }) => menu.classList.remove('open'));
+      window.addEventListener('scroll', closeAll, { passive: true });
+      breadcrumbs.addEventListener('scroll', closeAll, { passive: true });
+    }
+
+    // ----- 3. Scroll affordance fade ---------------------------------
+
+    function setupScrollFade(breadcrumbs) {
+      const FADE = '2rem';
+      const update = () => {
+        const hasOverflow =
+          breadcrumbs.scrollWidth > breadcrumbs.clientWidth + 1;
+        const atStart = breadcrumbs.scrollLeft <= 1;
+        const atEnd = breadcrumbs.scrollLeft + breadcrumbs.clientWidth
+          >= breadcrumbs.scrollWidth - 1;
+        const fadeLeft = hasOverflow && !atStart;
+        const fadeRight = hasOverflow && !atEnd;
+        const left = fadeLeft
+          ? `transparent 0, black ${FADE}`
+          : 'black 0';
+        const right = fadeRight
+          ? `black calc(100% - ${FADE}), transparent 100%`
+          : 'black 100%';
+        const gradient = `linear-gradient(to right, ${left}, ${right})`;
+        breadcrumbs.style.maskImage = gradient;
+        breadcrumbs.style.webkitMaskImage = gradient;
+      };
+      update();
+      breadcrumbs.addEventListener('scroll', update, { passive: true });
+      window.addEventListener('resize', update, { passive: true });
+    }
+  })();
 
   addEventListener('click', () => {
     for (let m of document.querySelectorAll('.crumb-menu.open, .title-dropdown-menu.open')) {

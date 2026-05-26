@@ -421,14 +421,31 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 .breadcrumbs {
   font-size: 0.85rem;
   margin: 1.25rem 0 0;
+  /* Keep the breadcrumb in a single horizontal row regardless of viewport
+     width. When the content is wider than the available space (typical on
+     mobile) this container scrolls horizontally instead of wrapping. */
+  overflow-x: auto;
+  /* Space between the breadcrumb text and the horizontal scrollbar so they
+     don't crowd each other. */
+  padding-bottom: 0.5rem;
+  /* Static right-edge fade as a scroll affordance. Progressive JS extends
+     this to also fade the left edge once the user has scrolled past the
+     start; without JS, the right fade alone is still a decent hint that
+     there's more to swipe to. */
+  mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 2rem), transparent);
 }
 
 .breadcrumb {
   align-items: center;
   display: flex;
-  flex-wrap: wrap;
+  /* No wrap — the .breadcrumbs container handles overflow via scroll. */
+  flex-wrap: nowrap;
   gap: 0.4rem;
   margin: 0.15rem 0;
+  /* Force the row to its natural content width so it can extend past the
+     container's clientWidth and trigger horizontal scrolling. */
+  width: max-content;
 }
 
 .breadcrumb-fork {
@@ -440,9 +457,32 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 .breadcrumb-fork-row {
   align-items: center;
   display: inline-flex;
-  flex-wrap: wrap;
+  /* Same single-row enforcement as the parent .breadcrumb. */
+  flex-wrap: nowrap;
   gap: 0.4rem;
+  /* Empty middles (a trail with no divergent crumbs after collapsing
+     prefix/suffix) still reserve a full line of vertical space. */
   min-height: 1.2em;
+}
+
+/* Wraps the inline <svg> branch + its .breadcrumb-fork at every fork
+   level (outer + each nested sub-fork). The two are flex siblings so the
+   SVG sits on the LEFT of the fork rows and they wrap together as a unit
+   on narrow viewports. */
+.breadcrumb-tree-group {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.4rem;
+}
+
+/* The drawn tree branch. JS sets its `height` to match the fork's actual
+   rendered height so the arm y-coordinates (which are percentages in a
+   100x100 viewBox) land on each row's vertical centre. */
+.breadcrumb-tree-branch {
+  display: block;
+  flex-shrink: 0;
+  width: 1.4em;
 }
 
 .breadcrumb a,
