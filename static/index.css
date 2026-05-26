@@ -424,7 +424,25 @@ h1:has(+ .subtitle), h1:has(+ .subtitle-row) {
 }
 
 .breadcrumb {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
   margin: 0.15rem 0;
+}
+
+.breadcrumb-fork {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.breadcrumb-fork-row {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-height: 1.2em;
 }
 
 .breadcrumb a,
@@ -790,7 +808,6 @@ dd:has(.copy-btn) {
   --light-bg: #ffffff;
   --dark-fg: #000000;
   --light-fg: #000000;
-  --link: #f2a900;
 }
 
 :root[data-theme=light] img.icon {
@@ -811,8 +828,10 @@ dd:has(.copy-btn) {
   border-color: #000;
 }
 
-:root[data-theme=light] .inscription > a > iframe,
-:root[data-theme=light] .inscription > iframe {
-  border: 1px solid #000;
-  border-radius: 2%;
+:root[data-theme=light] .thumbnails > a {
+  border-color: #ddd;
+}
+
+:root[data-theme=light] .thumbnails > a:hover {
+  border-color: #aaa;
 }

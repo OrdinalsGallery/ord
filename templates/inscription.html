@@ -25,12 +25,76 @@
 %% }
 </div>
 %% if !self.breadcrumbs.is_empty() {
+%% let layout = self.breadcrumb_layout();
 <div class=breadcrumbs>
-%% for trail in &self.breadcrumbs {
 <div class=breadcrumb>
-%% for (i, crumb) in trail.iter().enumerate() {
+%% for (i, crumb) in layout.prefix.iter().enumerate() {
 <span class=crumb>
-%% if i + 1 < trail.len() {
+<a href=/inscription/{{ crumb.id }}>{{ crumb.title }}</a>
+%% if !crumb.reinscriptions.is_empty() || !crumb.children.is_empty() {
+<button class=crumb-toggle type=button aria-label=reinscriptions></button>
+<span class=crumb-menu>
+%% for reinscription in &crumb.reinscriptions {
+<a href=/inscription/{{ reinscription.id }}>{{ reinscription.label }}</a>
+%% }
+%% if !crumb.reinscriptions.is_empty() && !crumb.children.is_empty() {
+<div class=crumb-menu-divider></div>
+%% }
+%% for child in &crumb.children {
+<a href=/inscription/{{ child.id }}>{{ child.label }}</a>
+%% }
+%% if crumb.more_children {
+<a href=/children/{{ crumb.id }}>all children</a>
+%% }
+</span>
+%% }
+</span>
+%% if i + 1 < layout.prefix.len() {
+/
+%% }
+%% }
+%% if layout.middles.len() > 1 {
+<div class=breadcrumb-fork>
+%% for middle in &layout.middles {
+<div class=breadcrumb-fork-row>
+%% if !middle.is_empty() {
+/
+%% for (j, crumb) in middle.iter().enumerate() {
+<span class=crumb>
+<a href=/inscription/{{ crumb.id }}>{{ crumb.title }}</a>
+%% if !crumb.reinscriptions.is_empty() || !crumb.children.is_empty() {
+<button class=crumb-toggle type=button aria-label=reinscriptions></button>
+<span class=crumb-menu>
+%% for reinscription in &crumb.reinscriptions {
+<a href=/inscription/{{ reinscription.id }}>{{ reinscription.label }}</a>
+%% }
+%% if !crumb.reinscriptions.is_empty() && !crumb.children.is_empty() {
+<div class=crumb-menu-divider></div>
+%% }
+%% for child in &crumb.children {
+<a href=/inscription/{{ child.id }}>{{ child.label }}</a>
+%% }
+%% if crumb.more_children {
+<a href=/children/{{ crumb.id }}>all children</a>
+%% }
+</span>
+%% }
+</span>
+%% if j + 1 < middle.len() {
+/
+%% }
+%% }
+%% }
+</div>
+%% }
+</div>
+%% }
+%% if !layout.suffix.is_empty() && (!layout.prefix.is_empty() || layout.middles.len() > 1) {
+/
+%% }
+%% for (i, crumb) in layout.suffix.iter().enumerate() {
+<span class=crumb>
+%% if i + 1 < layout.suffix.len() {
 <a href=/inscription/{{ crumb.id }}>{{ crumb.title }}</a>
 %% } else {
 <span class=current>{{ crumb.title }}</span>
@@ -53,12 +117,11 @@
 </span>
 %% }
 </span>
-%% if i + 1 < trail.len() {
+%% if i + 1 < layout.suffix.len() {
 /
 %% }
 %% }
 </div>
-%% }
 </div>
 %% }
 <dl>

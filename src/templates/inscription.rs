@@ -15,6 +15,23 @@ pub struct Crumb {
   pub more_children: bool,
 }
 
+/// View helper: the breadcrumb trail set collapsed into a single-line
+/// inline form with a vertical fork only where the parent paths diverge.
+///
+/// * `prefix`  — crumbs shared by every trail at the start (may be empty).
+/// * `middles` — per-trail divergent middle (empty when only one trail
+///   exists; with multiple trails, one entry per trail in input order; an
+///   entry may itself be empty when a trail goes directly from the common
+///   prefix into the common suffix).
+/// * `suffix`  — crumbs shared by every trail at the end (always contains
+///   at least the current inscription's crumb when any trail is present).
+#[derive(Clone, Debug)]
+pub struct BreadcrumbLayout {
+  pub prefix: Vec<Crumb>,
+  pub middles: Vec<Vec<Crumb>>,
+  pub suffix: Vec<Crumb>,
+}
+
 pub fn text_title(inscription: &Inscription) -> Option<String> {
   const MAX_LEN: usize = 64;
 
@@ -69,6 +86,89 @@ impl PageContent for InscriptionHtml {
 }
 
 impl InscriptionHtml {
+  /// Collapse `self.breadcrumbs` into a `BreadcrumbLayout`: longest common
+  /// prefix + per-trail divergent middle + longest common suffix. With a
+  /// single trail (or trails that dedupe to one) `middles` is empty and
+  /// the template renders a single line; with multiple distinct trails it
+  /// renders a vertical fork only across the divergent middle.
+  pub fn breadcrumb_layout(&self) -> BreadcrumbLayout {
+    // Two trails through equivalent ancestors shouldn't produce a fork of
+    // identical rows, so dedupe by the trail's id sequence first.
+    let mut trails: Vec<Vec<Crumb>> = Vec::new();
+    for trail in &self.breadcrumbs {
+      if !trails.iter().any(|existing| {
+        existing.len() == trail.len()
+          && existing.iter().zip(trail).all(|(a, b)| a.id == b.id)
+      }) {
+        trails.push(trail.clone());
+      }
+    }
+
+    if trails.is_empty() {
+      return BreadcrumbLayout {
+        prefix: Vec::new(),
+        middles: Vec::new(),
+        suffix: Vec::new(),
+      };
+    }
+
+    if trails.len() == 1 {
+      let mut single = trails.into_iter().next().unwrap();
+      let suffix = match single.pop() {
+        Some(current) => vec![current],
+        None => Vec::new(),
+      };
+      return BreadcrumbLayout {
+        prefix: single,
+        middles: Vec::new(),
+        suffix,
+      };
+    }
+
+    // Multi-trail: longest common prefix, capped so the current crumb is
+    // always reserved for the suffix.
+    let min_len = trails.iter().map(|t| t.len()).min().unwrap_or(0);
+    let max_prefix = min_len.saturating_sub(1);
+    let mut prefix_len = 0;
+    while prefix_len < max_prefix
+      && trails
+        .iter()
+        .all(|t| t[prefix_len].id == trails[0][prefix_len].id)
+    {
+      prefix_len += 1;
+    }
+
+    // Longest common suffix, walked from each trail's end, capped at the
+    // remaining length of the shortest trail so middles never go negative.
+    let max_suffix = trails
+      .iter()
+      .map(|t| t.len() - prefix_len)
+      .min()
+      .unwrap_or(0);
+    let mut suffix_len = 0;
+    while suffix_len < max_suffix
+      && trails.iter().all(|t| {
+        t[t.len() - 1 - suffix_len].id
+          == trails[0][trails[0].len() - 1 - suffix_len].id
+      })
+    {
+      suffix_len += 1;
+    }
+
+    let prefix = trails[0][..prefix_len].to_vec();
+    let suffix = trails[0][trails[0].len() - suffix_len..].to_vec();
+    let middles: Vec<Vec<Crumb>> = trails
+      .iter()
+      .map(|t| t[prefix_len..t.len() - suffix_len].to_vec())
+      .collect();
+
+    BreadcrumbLayout {
+      prefix,
+      middles,
+      suffix,
+    }
+  }
+
   fn metadata_sections_from_values(
     opus_metadata: Option<Value>,
     metadata: Option<Value>,
@@ -392,6 +492,175 @@ mod tests {
         <a href=/inscription/4{64}i4>Sound Gallery</a>
         <a href=/inscription/5{64}i5>Image Gallery</a>
         </span>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn breadcrumb_fork_collapses_common_prefix_and_suffix() {
+    assert_regex_match!(
+      InscriptionHtml {
+        breadcrumbs: vec![
+          vec![
+            Crumb {
+              id: inscription_id(2),
+              title: "MoBA".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(3),
+              title: "Inscription Clubs".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(1),
+              title: "Ordinal Archaeology".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+          ],
+          vec![
+            Crumb {
+              id: inscription_id(2),
+              title: "MoBA".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(4),
+              title: "Library".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(1),
+              title: "Ordinal Archaeology".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+          ],
+        ],
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        .*
+        <a href=/inscription/2{64}i2>MoBA</a>
+        .*
+        <div class=breadcrumb-fork>
+        <div class=breadcrumb-fork-row>
+        .*<a href=/inscription/3{64}i3>Inscription Clubs</a>.*
+        </div>
+        <div class=breadcrumb-fork-row>
+        .*<a href=/inscription/4{64}i4>Library</a>.*
+        </div>
+        </div>
+        .*
+        <span class=current>Ordinal Archaeology</span>
+        .*
+      "
+      .unindent()
+    );
+  }
+
+  #[test]
+  fn breadcrumb_fork_blank_row_when_trail_has_no_divergent_middle() {
+    // Trail A: [X, Y, Z, current]. Trail B: [X, Z, current]. After
+    // collapsing the shared prefix [X] and the shared suffix [Z, current],
+    // A's middle is [Y] and B's middle is empty — render B's row blank.
+    assert_regex_match!(
+      InscriptionHtml {
+        breadcrumbs: vec![
+          vec![
+            Crumb {
+              id: inscription_id(2),
+              title: "X".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(3),
+              title: "Y".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(4),
+              title: "Z".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(1),
+              title: "Current".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+          ],
+          vec![
+            Crumb {
+              id: inscription_id(2),
+              title: "X".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(4),
+              title: "Z".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+            Crumb {
+              id: inscription_id(1),
+              title: "Current".into(),
+              reinscriptions: Vec::new(),
+              children: Vec::new(),
+              more_children: false,
+            },
+          ],
+        ],
+        fee: 1,
+        inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+        id: inscription_id(1),
+        number: 1,
+        satpoint: satpoint(1, 0),
+        ..default()
+      },
+      "
+        .*
+        <a href=/inscription/2{64}i2>X</a>
+        .*
+        <div class=breadcrumb-fork>
+        <div class=breadcrumb-fork-row>
+        .*<a href=/inscription/3{64}i3>Y</a>.*
+        </div>
+        <div class=breadcrumb-fork-row>
+        </div>
+        </div>
+        .*
+        <a href=/inscription/4{64}i4>Z</a>
+        .*
+        <span class=current>Current</span>
         .*
       "
       .unindent()
