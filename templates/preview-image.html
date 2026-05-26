@@ -6,7 +6,12 @@
     <title>Inscription {{self.inscription_number}} Preview</title>
     <style>
       html {
-        background-color: #131516;
+        /* Transparent so the iframe blends with whatever the embedding
+           page's background is — the image is `background-size: contain`,
+           and any unfilled space (top/bottom or left/right when the
+           inscription isn't square) used to show through as a dark band
+           against light-themed parent pages. */
+        background-color: transparent;
         height: 100%;
       }
 
