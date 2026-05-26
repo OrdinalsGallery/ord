@@ -2252,11 +2252,11 @@ impl Server {
 
         let properties = inscription.properties();
 
-        let breadcrumbs = if info.parents.is_empty() {
-          Vec::new()
-        } else {
-          Self::breadcrumb_trails(&index, info.id, 0)?
-        };
+        // Always build a breadcrumb trail — even for root inscriptions with
+        // no parents — so the user has a place to navigate to children from
+        // (the trail collapses to a single bold current crumb whose
+        // dropdown lists its children).
+        let breadcrumbs = Self::breadcrumb_trails(&index, info.id, 0)?;
 
         InscriptionHtml {
           breadcrumbs,
