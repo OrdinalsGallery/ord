@@ -80,7 +80,10 @@ nav > :first-child {
 }
 
 nav a.active {
-  color: #ffffff;
+  /* Theme-aware: --light-fg is #ffffff in dark theme (current behavior) and
+     #000000 in light theme, so the active home logo stays visible against
+     the white nav background in light mode instead of disappearing. */
+  color: var(--light-fg);
 }
 
 nav a.active img {
