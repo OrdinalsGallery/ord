@@ -241,6 +241,14 @@ a.mythic {
   width: 100%;
 }
 
+img.rendering-pixelated {
+  image-rendering: pixelated;
+}
+
+img.rendering-auto {
+  image-rendering: auto;
+}
+
 .inscription {
   display: flex;
   gap: 0.5rem;

@@ -50,7 +50,7 @@ impl Iframe {
     match self.media {
       Some(Media::Image(rendering)) => write!(
         f,
-        "<img loading=lazy decoding=async style=image-rendering:{rendering} src=/content/{content_id}>",
+        "<img loading=lazy decoding=async class=rendering-{rendering} src=/content/{content_id}>",
       ),
       _ => write!(
         f,
@@ -123,7 +123,7 @@ mod tests {
       )
       .0
       .to_string(),
-      "<a href=/inscription/1{64}i1><img loading=lazy decoding=async style=image-rendering:pixelated src=/content/1{64}i1></a>",
+      "<a href=/inscription/1{64}i1><img loading=lazy decoding=async class=rendering-pixelated src=/content/1{64}i1></a>",
     );
   }
 
@@ -138,7 +138,7 @@ mod tests {
       )
       .0
       .to_string(),
-      "<a href=/gallery/1{64}i1/2><img loading=lazy decoding=async style=image-rendering:auto src=/content/3{64}i3></a>",
+      "<a href=/gallery/1{64}i1/2><img loading=lazy decoding=async class=rendering-auto src=/content/3{64}i3></a>",
     );
   }
 }
