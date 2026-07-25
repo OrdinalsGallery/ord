@@ -23,14 +23,21 @@ pub(crate) struct InscriptionsHtml {
   pub(crate) prev: Option<u32>,
   pub(crate) next: Option<u32>,
   pub(crate) sort: Sort,
+  pub(crate) cursed: bool,
 }
 
 impl InscriptionsHtml {
-  pub(crate) fn sort_query(&self) -> &'static str {
-    match self.sort {
-      Sort::Newest => "",
-      Sort::Oldest => "?sort=oldest",
+  pub(crate) fn query_string(&self) -> &'static str {
+    match (self.sort, self.cursed) {
+      (Sort::Newest, false) => "",
+      (Sort::Oldest, false) => "?sort=oldest",
+      (Sort::Newest, true) => "?cursed=1",
+      (Sort::Oldest, true) => "?sort=oldest&cursed=1",
     }
+  }
+
+  pub(crate) fn cursed_checked(&self) -> &'static str {
+    if self.cursed { " checked" } else { "" }
   }
 
   pub(crate) fn selected_if(&self, sort: Sort) -> &'static str {
@@ -56,6 +63,7 @@ mod tests {
         prev: None,
         next: None,
         sort: Sort::Newest,
+        cursed: false,
       },
       "
         .*<h1>All Inscriptions</h1>.*
@@ -80,6 +88,7 @@ mod tests {
         prev: Some(1),
         next: Some(2),
         sort: Sort::Newest,
+        cursed: false,
       },
       "
         .*<a class=prev href=/inscriptions/1>prev</a>
@@ -97,6 +106,7 @@ mod tests {
         prev: Some(0),
         next: Some(2),
         sort: Sort::Oldest,
+        cursed: false,
       },
       "
         .*<a class=prev href=/inscriptions/0\\?sort=oldest>prev</a>

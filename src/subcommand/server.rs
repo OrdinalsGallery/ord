@@ -8,7 +8,7 @@ use {
   super::*,
   crate::inscriptions::opus_metadata,
   crate::templates::{
-    AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, Crumb,
+    AddressHtml, BlockHtml, BlocksHtml, ChildrenHtml, ClockSvg, CollectionsHtml, ComingSoonHtml, Crumb,
     EmbedAudioHtml, EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml, GalleriesHtml, GalleryHtml,
     HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml, InscriptionsHtml, InscriptionsSort,
     ItemHtml, OutputHtml, SatInscription, text_title,
@@ -63,6 +63,7 @@ enum SpawnConfig {
 #[derive(Deserialize)]
 pub(crate) struct InscriptionsQuery {
   pub(crate) sort: Option<InscriptionsSort>,
+  pub(crate) cursed: Option<u8>,
 }
 
 #[derive(Deserialize)]
@@ -247,6 +248,7 @@ impl Server {
         )
         .route("/clock", get(Self::clock))
         .route("/collections", get(Self::collections))
+        .route("/museum", get(Self::museum))
         .route("/collections/{page}", get(Self::collections_paginated))
         .route("/decode/{txid}", get(Self::decode))
         .route("/galleries", get(Self::galleries))
@@ -2478,6 +2480,12 @@ impl Server {
     Self::collections_paginated(Extension(server_config), Extension(index), Path(0)).await
   }
 
+  async fn museum(
+    Extension(server_config): Extension<Arc<ServerConfig>>,
+  ) -> ServerResult {
+    Ok(ComingSoonHtml {}.page(server_config).into_response())
+  }
+
   async fn collections_paginated(
     Extension(server_config): Extension<Arc<ServerConfig>>,
     Extension(index): Extension<Arc<Index>>,
@@ -2706,7 +2714,12 @@ impl Server {
   ) -> ServerResult {
     task::block_in_place(|| {
       let sort = query.sort.unwrap_or_default();
-      let (inscriptions, more) = index.get_inscriptions_paginated(100, page_index, sort)?;
+      let cursed = query.cursed == Some(1);
+      let (inscriptions, more) = if cursed {
+        index.get_cursed_inscriptions_paginated(100, page_index, sort)?
+      } else {
+        index.get_inscriptions_paginated(100, page_index, sort)?
+      };
 
       let prev = page_index.checked_sub(1);
 
@@ -2725,6 +2738,7 @@ impl Server {
           next,
           prev,
           sort,
+          cursed,
         }
         .page(server_config)
         .into_response()

@@ -8,6 +8,7 @@ pub(crate) use {
   children::ChildrenHtml,
   clock::ClockSvg,
   collections::CollectionsHtml,
+  coming_soon::ComingSoonHtml,
   embed::{EmbedAudioHtml, EmbedImageHtml, EmbedUnknownHtml, EmbedVideoHtml},
   galleries::GalleriesHtml,
   gallery::GalleryHtml,
@@ -46,6 +47,7 @@ pub mod blocks;
 mod children;
 mod clock;
 pub mod collections;
+mod coming_soon;
 mod embed;
 mod galleries;
 mod gallery;

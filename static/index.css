@@ -731,7 +731,20 @@ dt.with-toolbar {
 }
 
 .inscriptions-toolbar select {
-  padding: 0 0.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url(/static/chevron-down.svg);
+  background-position: right 0.7rem center;
+  background-repeat: no-repeat;
+  background-size: 0.7rem auto;
+  padding: 0 1.8rem 0 0.7rem;
+}
+
+.coming-soon {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 50vh;
 }
 
 .toolbar-btn::-webkit-details-marker {

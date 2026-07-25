@@ -2070,6 +2070,85 @@ impl Index {
     Ok((inscriptions, more))
   }
 
+  pub fn get_cursed_inscriptions_paginated(
+    &self,
+    page_size: u32,
+    page_index: u32,
+    sort: crate::templates::inscriptions::Sort,
+  ) -> Result<(Vec<InscriptionId>, bool)> {
+    use crate::templates::inscriptions::Sort;
+
+    let rtx = self.database.begin_read()?;
+
+    let inscription_number_to_sequence_number =
+      rtx.open_table(INSCRIPTION_NUMBER_TO_SEQUENCE_NUMBER)?;
+    let sequence_number_to_inscription_entry =
+      rtx.open_table(SEQUENCE_NUMBER_TO_INSCRIPTION_ENTRY)?;
+
+    // Cursed inscriptions are numbered densely from -1 downward, so page
+    // bounds can be computed arithmetically instead of skipping.
+    let lowest = i64::from(
+      inscription_number_to_sequence_number
+        .iter()?
+        .next()
+        .map(|result| result.map(|(number, _)| number.value()))
+        .transpose()?
+        .unwrap_or(0),
+    );
+
+    if lowest >= 0 {
+      return Ok((Vec::new(), false));
+    }
+
+    let page_size_i = i64::from(page_size);
+    let skip = page_size_i * i64::from(page_index);
+
+    let sequence_numbers: Vec<u32> = match sort {
+      // Most negative number = most recently inscribed cursed.
+      Sort::Newest => {
+        let start = lowest.saturating_add(skip);
+        if start >= 0 {
+          return Ok((Vec::new(), false));
+        }
+        let end = start.saturating_add(page_size_i + 1).min(0);
+        inscription_number_to_sequence_number
+          .range(i32::try_from(start).unwrap()..i32::try_from(end).unwrap())?
+          .map(|result| result.map(|(_, sequence)| sequence.value()))
+          .collect::<Result<Vec<u32>, StorageError>>()?
+      }
+      Sort::Oldest => {
+        let hi = -1_i64 - skip;
+        if hi < lowest {
+          return Ok((Vec::new(), false));
+        }
+        let lo = (hi - page_size_i).max(lowest);
+        inscription_number_to_sequence_number
+          .range(i32::try_from(lo).unwrap()..=i32::try_from(hi).unwrap())?
+          .rev()
+          .map(|result| result.map(|(_, sequence)| sequence.value()))
+          .collect::<Result<Vec<u32>, StorageError>>()?
+      }
+    };
+
+    let mut inscriptions = sequence_numbers
+      .into_iter()
+      .map(|sequence| {
+        sequence_number_to_inscription_entry
+          .get(&sequence)?
+          .map(|entry| InscriptionEntry::load(entry.value()).id)
+          .ok_or_else(|| anyhow!("missing inscription entry for sequence number {sequence}"))
+      })
+      .collect::<Result<Vec<InscriptionId>>>()?;
+
+    let more = u32::try_from(inscriptions.len()).unwrap_or(u32::MAX) > page_size;
+
+    if more {
+      inscriptions.pop();
+    }
+
+    Ok((inscriptions, more))
+  }
+
   pub fn get_inscriptions_in_block(&self, block_height: u32) -> Result<Vec<InscriptionId>> {
     let rtx = self.database.begin_read()?;
 
