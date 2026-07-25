@@ -186,8 +186,10 @@ mod tests {
 \s*
     <link rel=icon href=/static/favicon.png>
     <link rel=icon href=/static/favicon.svg>
+    <script src=/static/theme-init.js></script>
     <link rel=stylesheet href=/static/index.css>
     <link rel=stylesheet href=/static/modern-normalize.css>
+    <script src=/static/marketplaces.js></script>
     <script src=/static/index.js></script>
     <script src=/static/inscription-embed.js defer></script>
   </head>
@@ -238,7 +240,7 @@ mod tests {
         index_sats: false,
         ..default()
       })),
-      r".*<nav>\s*<a href=/ title=home>Ordinals<sup>Gallery</sup></a>.*<a href=/clock title=clock>.*</a>\s*<form action=/search.*",
+      r".*<nav>\s*<a href=/ title=home>Ordinals<sup>Gallery</sup></a>.*<a href=/clock title=clock>.*</a>.*<form action=/search.*",
     );
   }
 

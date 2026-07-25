@@ -736,7 +736,7 @@ impl Server {
          }| AddressHtml {
           address: satscard.address.clone(),
           header: false,
-          inscriptions,
+          inscriptions: inscriptions.map(|ids| Self::thumbs(&index, ids)),
           outputs,
           runes_balances,
           sat_balance,
@@ -821,7 +821,7 @@ impl Server {
         SatHtml {
           address,
           blocktime,
-          inscriptions,
+          inscriptions: Self::thumbs(&index, inscriptions),
           sat,
           satpoint,
         }
@@ -852,7 +852,9 @@ impl Server {
         OutputHtml {
           chain: server_config.chain,
           confirmations: output_info.confirmations,
-          inscriptions: output_info.inscriptions,
+          inscriptions: output_info
+            .inscriptions
+            .map(|ids| Self::thumbs(&index, ids)),
           outpoint,
           output: txout,
           runes: output_info.runes,
@@ -1049,6 +1051,7 @@ impl Server {
           id,
           mintable,
           parent,
+          parent_media: None,
         })
         .into_response()
       } else {
@@ -1057,6 +1060,7 @@ impl Server {
           id,
           mintable,
           parent,
+          parent_media: parent.and_then(|parent| Self::thumbnail_media(&index, parent)),
         }
         .page(server_config)
         .into_response()
@@ -1119,7 +1123,7 @@ impl Server {
     task::block_in_place(|| {
       Ok(
         HomeHtml {
-          inscriptions: index.get_home_inscriptions()?,
+          inscriptions: Self::thumbs(&index, index.get_home_inscriptions()?),
         }
         .page(server_config),
       )
@@ -1144,9 +1148,25 @@ impl Server {
       Ok(if accept_json {
         Json(api::Blocks::new(blocks, featured_blocks)).into_response()
       } else {
-        BlocksHtml::new(blocks, featured_blocks)
-          .page(server_config)
-          .into_response()
+        let featured_medias = featured_blocks
+          .iter()
+          .map(|(hash, ids)| {
+            (
+              *hash,
+              ids
+                .iter()
+                .map(|id| Self::thumbnail_media(&index, *id))
+                .collect(),
+            )
+          })
+          .collect();
+
+        BlocksHtml {
+          featured_medias,
+          ..BlocksHtml::new(blocks, featured_blocks)
+        }
+        .page(server_config)
+        .into_response()
       })
     })
   }
@@ -1231,7 +1251,7 @@ impl Server {
         AddressHtml {
           address,
           header: true,
-          inscriptions,
+          inscriptions: inscriptions.map(|ids| Self::thumbs(&index, ids)),
           outputs,
           runes_balances,
           sat_balance,
@@ -1240,6 +1260,21 @@ impl Server {
         .into_response()
       })
     })
+  }
+
+  fn thumbnail_media(index: &Index, id: InscriptionId) -> Option<Media> {
+    index
+      .get_inscription_by_id(id)
+      .ok()
+      .flatten()
+      .map(|inscription| inscription.sniffed_media())
+  }
+
+  fn thumbs(index: &Index, ids: Vec<InscriptionId>) -> Vec<(InscriptionId, Option<Media>)> {
+    ids
+      .into_iter()
+      .map(|id| (id, Self::thumbnail_media(index, id)))
+      .collect()
   }
 
   fn address_info(index: &Index, address: &Address) -> ServerResult<Option<api::AddressInfo>> {
@@ -1312,7 +1347,7 @@ impl Server {
           Height(height),
           Self::index_height(&index)?,
           total_num,
-          featured_inscriptions,
+          Self::thumbs(&index, featured_inscriptions),
           runes,
         )
         .page(server_config)
@@ -1339,6 +1374,7 @@ impl Server {
           chain: server_config.chain,
           etching: index.get_etching(txid)?,
           inscription_count,
+          inscription_medias: Vec::new(),
           transaction,
           txid,
         })
@@ -1348,6 +1384,10 @@ impl Server {
           chain: server_config.chain,
           etching: index.get_etching(txid)?,
           inscription_count,
+          inscription_medias: ParsedEnvelope::from_transaction(&transaction)
+            .into_iter()
+            .map(|envelope| Some(envelope.payload.sniffed_media()))
+            .collect(),
           transaction,
           txid,
         }
@@ -2271,15 +2311,20 @@ impl Server {
             acc
           })),
           child_count: info.child_count,
-          children: info.children,
+          children: Self::thumbs(index, info.children),
           fee: info.fee,
+          gallery_media: properties
+            .gallery
+            .iter()
+            .map(|item| Self::thumbnail_media(index, item.id()))
+            .collect(),
           height: info.height,
           id: info.id,
           inscription,
           next: info.next,
           number: info.number,
           output: txout,
-          parents: info.parents,
+          parents: Self::thumbs(index, info.parents),
           previous: info.previous,
           properties,
           rune: info.rune,
@@ -2448,7 +2493,7 @@ impl Server {
 
       Ok(
         CollectionsHtml {
-          inscriptions: collections,
+          inscriptions: Self::thumbs(&index, collections),
           prev,
           next,
         }
@@ -2494,7 +2539,7 @@ impl Server {
         .into_response()
       } else {
         GalleriesHtml {
-          inscriptions: galleries,
+          inscriptions: Self::thumbs(&index, galleries),
           prev,
           next,
         }
@@ -2567,7 +2612,10 @@ impl Server {
           id,
           number,
           title: properties.attributes.title.clone(),
-          items,
+          items: items
+            .into_iter()
+            .map(|(i, item_id)| (i, item_id, Self::thumbnail_media(&index, item_id)))
+            .collect(),
           prev_page,
           next_page,
         }
@@ -2623,7 +2671,7 @@ impl Server {
         ChildrenHtml {
           parent,
           parent_number,
-          children,
+          children: Self::thumbs(&index, children),
           prev_page,
           next_page,
         }
@@ -2673,7 +2721,7 @@ impl Server {
         .into_response()
       } else {
         InscriptionsHtml {
-          inscriptions,
+          inscriptions: Self::thumbs(&index, inscriptions),
           next,
           prev,
           sort,
@@ -2730,7 +2778,7 @@ impl Server {
         InscriptionsBlockHtml::new(
           block_height,
           index.block_height()?.unwrap_or(Height(0)).n(),
-          inscriptions,
+          Self::thumbs(&index, inscriptions),
           more,
           page_index,
         )
@@ -2774,7 +2822,7 @@ impl Server {
         ParentsHtml {
           id,
           number: child.inscription_number,
-          parents,
+          parents: Self::thumbs(&index, parents),
           prev_page,
           next_page,
         }
@@ -4029,6 +4077,7 @@ mod tests {
         entry,
         mintable: false,
         parent: Some(parent),
+        parent_media: None,
       },
     );
 
@@ -6583,7 +6632,7 @@ mod tests {
     server.assert_response_regex(
       format!("/gallery/{}/0", Sat(5000000000).name()),
       StatusCode::OK,
-      ".*<title>Gallery 0 Item 0</title.*",
+      ".*<title>Gallery 0 / Item 0</title.*",
     );
   }
 
@@ -6862,7 +6911,7 @@ mod tests {
       r".*
 <h1>Collections</h1>
 <div class=thumbnails>
-  <a href=/inscription/.*><iframe .* src=/preview/.*></iframe></a>
+  <a href=/inscription/.*><img .* src=/content/.*></a>
   (<a href=/inscription/[[:xdigit:]]{64}i0>.*</a>\s*){99}
 </div>
 <div class=center>
@@ -6879,7 +6928,7 @@ prev
       ".*
 <h1>Collections</h1>
 <div class=thumbnails>
-  <a href=/inscription/.*><iframe .* src=/preview/.*></iframe></a>
+  <a href=/inscription/.*><img .* src=/content/.*></a>
 </div>
 <div class=center>
 <a class=prev href=/collections/0>prev</a>
@@ -7167,7 +7216,7 @@ next
       r".*
 <h1>Galleries</h1>
 <div class=thumbnails>
-  <a href=/inscription/.*><iframe .* src=/preview/.*></iframe></a>
+  <a href=/inscription/.*><img .* src=/content/.*></a>
   (<a href=/inscription/[[:xdigit:]]{64}i0>.*</a>\s*){99}
 </div>
 <div class=center>
@@ -7184,7 +7233,7 @@ prev
       ".*
 <h1>Galleries</h1>
 <div class=thumbnails>
-  <a href=/inscription/.*><iframe .* src=/preview/.*></iframe></a>
+  <a href=/inscription/.*><img .* src=/content/.*></a>
 </div>
 <div class=center>
 <a class=prev href=/galleries/0>prev</a>
@@ -7736,7 +7785,7 @@ next
     server.assert_response_regex(
       format!("/inscription/{parent_inscription_id}"),
       StatusCode::OK,
-      format!(".*<title>Inscription 0</title>.*<dt>children</dt>.*<a href=/inscription/{inscription_id}>.*</a>.*"),
+      format!(".*<title>Inscription 0</title>.*<dt class=with-toolbar>children.*<a href=/inscription/{inscription_id}>.*</a>.*"),
     );
 
     assert_eq!(
@@ -7925,7 +7974,7 @@ next
       format!("/gallery/{gallery_id}"),
       StatusCode::OK,
       format!(
-        ".*<title>Inscription \\d+ Gallery</title>.*<h1><a href=/inscription/{gallery_id}>Inscription \\d+</a> Gallery</h1>.*<div class=thumbnails>.*<a href=/gallery/{gallery_id}/0><iframe .* src=/preview/{item_id}\\?thumb=1></iframe></a>.*",
+        ".*<title>Inscription \\d+ Gallery</title>.*<h1><a href=/inscription/{gallery_id}>Inscription \\d+</a> / Gallery</h1>.*<div class=thumbnails>.*<a href=/gallery/{gallery_id}/0><iframe .* src=/preview/{item_id}\\?thumb=1></iframe></a>.*",
       ),
     );
   }
@@ -8100,7 +8149,7 @@ next
       StatusCode::OK,
       format!(
         ".*<title>Inscription \\d+</title>.*
-.*<dt>gallery</dt>.*
+.*<dt class=with-toolbar>gallery.*
 .*<a href=/gallery/{gallery_id}/.*><iframe .* src=/preview/.*></iframe></a>.*
 .*<a href=/gallery/{gallery_id}/.*><iframe .* src=/preview/.*></iframe></a>.*
 .*<a href=/gallery/{gallery_id}/.*><iframe .* src=/preview/.*></iframe></a>.*

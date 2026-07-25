@@ -58,15 +58,16 @@ pub struct InscriptionHtml {
   pub chain: Chain,
   pub charms: u16,
   pub child_count: u64,
-  pub children: Vec<InscriptionId>,
+  pub children: Vec<(InscriptionId, Option<Media>)>,
   pub fee: u64,
+  pub gallery_media: Vec<Option<Media>>,
   pub height: u32,
   pub id: InscriptionId,
   pub inscription: Inscription,
   pub next: Option<InscriptionId>,
   pub number: i32,
   pub output: Option<TxOut>,
-  pub parents: Vec<InscriptionId>,
+  pub parents: Vec<(InscriptionId, Option<Media>)>,
   pub previous: Option<InscriptionId>,
   pub properties: Properties,
   pub rune: Option<SpacedRune>,
@@ -854,7 +855,7 @@ mod tests {
   fn with_parent() {
     assert_regex_match!(
       InscriptionHtml {
-        parents: vec![inscription_id(2)],
+        parents: vec![(inscription_id(2), None)],
         fee: 1,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         id: inscription_id(1),
@@ -925,7 +926,7 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         child_count: 2,
-        children: vec![inscription_id(2), inscription_id(3)],
+        children: vec![(inscription_id(2), None), (inscription_id(3), None)],
         fee: 1,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         id: inscription_id(1),
@@ -1006,7 +1007,7 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         child_count: 1,
-        children: vec![inscription_id(2)],
+        children: vec![(inscription_id(2), None)],
         fee: 1,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         id: inscription_id(1),

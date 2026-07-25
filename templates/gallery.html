@@ -7,8 +7,8 @@
 <h3>No gallery items</h3>
 %% } else {
 <div class=thumbnails>
-%% for (i, id) in &self.items {
-  {{ Iframe::item(self.id, *i, *id) }}
+%% for (i, id, media) in &self.items {
+  {{ Iframe::item(self.id, *i, *id, *media) }}
 %% }
 </div>
 <div class=center>

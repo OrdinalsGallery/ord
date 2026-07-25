@@ -19,7 +19,7 @@ impl std::fmt::Display for Sort {
 
 #[derive(Boilerplate)]
 pub(crate) struct InscriptionsHtml {
-  pub(crate) inscriptions: Vec<InscriptionId>,
+  pub(crate) inscriptions: Vec<(InscriptionId, Option<Media>)>,
   pub(crate) prev: Option<u32>,
   pub(crate) next: Option<u32>,
   pub(crate) sort: Sort,
@@ -52,7 +52,7 @@ mod tests {
   fn without_prev_and_next() {
     assert_regex_match!(
       InscriptionsHtml {
-        inscriptions: vec![inscription_id(1), inscription_id(2)],
+        inscriptions: vec![(inscription_id(1), None), (inscription_id(2), None)],
         prev: None,
         next: None,
         sort: Sort::Newest,
@@ -76,7 +76,7 @@ mod tests {
   fn with_prev_and_next() {
     assert_regex_match!(
       InscriptionsHtml {
-        inscriptions: vec![inscription_id(1), inscription_id(2)],
+        inscriptions: vec![(inscription_id(1), None), (inscription_id(2), None)],
         prev: Some(1),
         next: Some(2),
         sort: Sort::Newest,
@@ -93,7 +93,7 @@ mod tests {
   fn oldest_sort_preserved_in_pagination_links() {
     assert_regex_match!(
       InscriptionsHtml {
-        inscriptions: vec![inscription_id(1)],
+        inscriptions: vec![(inscription_id(1), None)],
         prev: Some(0),
         next: Some(2),
         sort: Sort::Oldest,

@@ -129,8 +129,8 @@
   <dt>parents</dt>
   <dd>
     <div class=thumbnails>
-%% for parent in &self.parents {
-      {{Iframe::thumbnail(*parent)}}
+%% for (parent, media) in &self.parents {
+      {{Iframe::thumbnail(*parent, *media)}}
 %% }
     </div>
     <div class=center>
@@ -149,8 +149,8 @@
     <div class="gallery-row gallery-mode-scroll" data-gallery-total="{{ self.child_count }}" data-load-more-url="/r/children/{{ self.id }}">
       <button class=gallery-prev type=button aria-label="previous">❮</button>
       <div class=thumbnails>
-%% for id in &self.children {
-        {{ Iframe::thumbnail(*id) }}
+%% for (id, media) in &self.children {
+        {{ Iframe::thumbnail(*id, *media) }}
 %% }
       </div>
       <button class=gallery-next type=button aria-label="next">❯</button>
@@ -172,7 +172,7 @@
       <button class=gallery-prev type=button aria-label="previous">❮</button>
       <div class=thumbnails>
 %% for (i, item) in self.properties.gallery.iter().enumerate() {
-        {{ Iframe::item(self.id, i, item.id()) }}
+        {{ Iframe::item(self.id, i, item.id(), self.gallery_media.get(i).copied().flatten()) }}
 %% }
       </div>
       <button class=gallery-next type=button aria-label="next">❯</button>

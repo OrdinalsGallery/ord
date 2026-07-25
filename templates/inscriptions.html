@@ -30,8 +30,8 @@
   </label>
 </form>
 <div class=thumbnails>
-%% for id in &self.inscriptions {
-  {{Iframe::thumbnail(*id)}}
+%% for (id, media) in &self.inscriptions {
+  {{Iframe::thumbnail(*id, *media)}}
 %% }
 </div>
 <div class=center>

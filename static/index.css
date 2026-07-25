@@ -234,6 +234,13 @@ a.mythic {
   width: 100%;
 }
 
+.thumbnails img {
+  aspect-ratio: 1 / 1;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
 .inscription {
   display: flex;
   gap: 0.5rem;
