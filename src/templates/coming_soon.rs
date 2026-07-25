@@ -15,6 +15,6 @@ mod tests {
 
   #[test]
   fn coming_soon() {
-    assert_regex_match!(ComingSoonHtml {}, "<div class=coming-soon>\n  <h1>Coming Soon</h1>\n</div>\n",);
+    assert_regex_match!(ComingSoonHtml {}, "<h1>Coming Soon\\.</h1>\n",);
   }
 }

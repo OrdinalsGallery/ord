@@ -740,13 +740,6 @@ dt.with-toolbar {
   padding: 0 1.8rem 0 0.7rem;
 }
 
-.coming-soon {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  min-height: 50vh;
-}
-
 .toolbar-btn::-webkit-details-marker {
   display: none;
 }
