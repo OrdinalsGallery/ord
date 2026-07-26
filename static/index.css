@@ -223,6 +223,8 @@ a.mythic {
 }
 
 .thumbnails > a {
+  contain-intrinsic-size: auto 180px;
+  content-visibility: auto;
   margin: 1%;
   overflow: hidden;
   width: 23%;
