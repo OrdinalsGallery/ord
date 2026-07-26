@@ -6468,7 +6468,7 @@ mod tests {
       format!("/preview/{inscription_id}"),
       StatusCode::OK,
       &format!("default-src {origin} 'unsafe-inline'"),
-      format!(r".*background-image: url\(/content/{inscription_id}\);.*"),
+      format!(r".*<img src=/content/{inscription_id} .*"),
     );
   }
 
