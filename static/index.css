@@ -223,6 +223,7 @@ a.mythic {
 }
 
 .thumbnails > a {
+  aspect-ratio: 1 / 1;
   contain-intrinsic-size: auto 180px;
   content-visibility: auto;
   margin: 1%;
@@ -237,7 +238,6 @@ a.mythic {
 }
 
 .thumbnails img {
-  aspect-ratio: 1 / 1;
   height: 100%;
   object-fit: contain;
   width: 100%;
