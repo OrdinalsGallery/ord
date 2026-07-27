@@ -44,13 +44,20 @@ impl Iframe {
 
   // Images render as plain <img> tags pointing straight at /content: the
   // browser caches and persists them across scrolling, unlike lazy iframes
-  // which are discarded offscreen and reload on re-entry. Everything else
-  // (HTML, scripted SVG, video, models, …) keeps the sandboxed iframe.
+  // which are discarded offscreen and reload on re-entry. Arbitrary HTML
+  // inscriptions render script-less in grids: thumbnails are inert
+  // (pointer-events: none) yet a grid of live apps accumulates enough CPU
+  // that iOS kills the renderer. Our own preview wrappers (text, code,
+  // markdown, …) need their scripts to render and stay trusted.
   fn thumbnail_body(&self, content_id: InscriptionId, f: &mut Formatter) -> fmt::Result {
     match self.media {
       Some(Media::Image(rendering)) => write!(
         f,
         "<img loading=lazy decoding=async class=rendering-{rendering} src=/content/{content_id}>",
+      ),
+      Some(Media::Iframe) => write!(
+        f,
+        "<iframe sandbox scrolling=no loading=lazy src=/preview/{content_id}?thumb=1></iframe>",
       ),
       _ => write!(
         f,
@@ -124,6 +131,16 @@ mod tests {
       .0
       .to_string(),
       "<a href=/inscription/1{64}i1><img loading=lazy decoding=async class=rendering-pixelated src=/content/1{64}i1></a>",
+    );
+  }
+
+  #[test]
+  fn thumbnail_html_renders_scriptless_iframe() {
+    assert_regex_match!(
+      Iframe::thumbnail(inscription_id(1), Some(Media::Iframe))
+        .0
+        .to_string(),
+      "<a href=/inscription/1{64}i1><iframe sandbox scrolling=no loading=lazy src=/preview/1{64}i1\\?thumb=1></iframe></a>",
     );
   }
 
