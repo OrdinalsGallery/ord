@@ -24,6 +24,7 @@
          Safari ignores image-rendering on scaled background images but
          honors it on img elements. */
       img {
+        display: block;
         height: 100%;
         image-rendering: {{ self.image_rendering }};
         object-fit: contain;
