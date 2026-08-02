@@ -136,6 +136,11 @@ pub struct Server {
     help = "Decompress encoded content. Currently only supports brotli. Be careful using this on production instances. A decompressed inscription may be arbitrarily large, making decompression a DoS vector."
   )]
   pub(crate) decompress: bool,
+  #[arg(
+    long,
+    help = "Use <DOMAIN> in absolute URLs served to clients, such as Open Graph images and oEmbed links. Defaults to <CSP_ORIGIN>, then <ACME_DOMAIN>, then ordinals.com. Never derived from the host machine's name."
+  )]
+  pub(crate) domain: Option<String>,
   #[arg(long, env = "ORD_SERVER_DISABLE_JSON_API", help = "Disable JSON API.")]
   pub(crate) disable_json_api: bool,
   #[arg(
@@ -220,7 +225,7 @@ impl Server {
         chain: settings.chain(),
         csp_origin: self.csp_origin.clone(),
         decompress: self.decompress,
-        domain: acme_domains.first().cloned(),
+        domain: self.public_domain(),
         index_sats: index.has_sat_index(),
         json_api_enabled: !self.disable_json_api,
         proxy: self.proxy.clone(),
@@ -553,6 +558,15 @@ impl Server {
         System::host_name().ok_or(anyhow!("no hostname found"))?,
       ])
     }
+  }
+
+  // Only ever an explicitly configured domain. The host machine's name is used
+  // for ACME challenges when no domain is given, but must never reach clients.
+  fn public_domain(&self) -> Option<String> {
+    self
+      .domain
+      .clone()
+      .or_else(|| self.acme_domain.first().cloned())
   }
 
   fn http_port(&self) -> Option<u16> {
@@ -3266,7 +3280,7 @@ mod tests {
         content,
         Arc::new(ServerConfig {
           chain: self.index.chain(),
-          domain: Some(System::host_name().unwrap()),
+          domain: None,
           ..Default::default()
         }),
       )

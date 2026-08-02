@@ -86,11 +86,7 @@ where
   }
 
   fn og_image(&self) -> String {
-    if let Some(domain) = &self.config.domain {
-      format!("https://{domain}/static/favicon.png")
-    } else {
-      "https://ordinals.com/static/favicon.png".into()
-    }
+    format!("{}/static/favicon.png", self.page_origin())
   }
 
   fn page_origin(&self) -> String {
@@ -257,6 +253,32 @@ mod tests {
         ..default()
       })),
       r".*<nav>\s*<a href=/ title=home>Ordinals\.Gallery<sup>signet</sup></a>.*"
+    );
+  }
+
+  #[test]
+  fn og_image_prefers_csp_origin_over_domain() {
+    assert_regex_match!(
+      Foo.page(Arc::new(ServerConfig {
+        chain: Chain::Mainnet,
+        csp_origin: Some("https://ordinals.gallery".into()),
+        domain: Some("some-laptop.local".into()),
+        ..default()
+      })),
+      r".*<meta property=og:image content='https://ordinals\.gallery/static/favicon\.png'>.*"
+    );
+  }
+
+  #[test]
+  fn og_image_falls_back_to_ordinals_com() {
+    assert_regex_match!(
+      Foo.page(Arc::new(ServerConfig {
+        chain: Chain::Mainnet,
+        csp_origin: None,
+        domain: None,
+        ..default()
+      })),
+      r".*<meta property=og:image content='https://ordinals\.com/static/favicon\.png'>.*"
     );
   }
 }
