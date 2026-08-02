@@ -146,6 +146,90 @@ addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Thumbnails marked `data-scriptable` (HTML and SVG inscriptions) ship with
+  // a valueless `sandbox`, so their scripts never run — a grid of live
+  // inscriptions burns enough CPU that iOS kills the renderer. Recursive art
+  // is script-driven and renders blank while inert, so grant allow-scripts to
+  // thumbnails that are on screen and revoke it once they leave, never
+  // exceeding MAX_LIVE_THUMBNAILS at once.
+  //
+  // Sandbox flags are only applied when a frame navigates, so each transition
+  // swaps in a fresh clone: setting `sandbox` before insertion means the load
+  // happens under the new flags. `allow-same-origin` is never granted, so an
+  // upgraded thumbnail still runs on an opaque origin and cannot reach this
+  // document or anything stored against it.
+  //
+  // The ceiling matches GALLERY_PAGE_SIZE below, so a full grid page renders
+  // rather than trailing off into blank tiles. Lower it if iOS still sheds the
+  // renderer on heavy collections — the strip view only ever runs four or five
+  // at once, so this really bounds the grid and the ungated thumbnail lists on
+  // /inscriptions and the home page.
+  const MAX_LIVE_THUMBNAILS = 20;
+
+  // On-screen frames, and the subset of them currently running scripts. Both
+  // are insertion-ordered, so a grid with more visible thumbnails than slots
+  // fills them in registration (document) order.
+  let visibleThumbnails = new Set();
+  let liveThumbnails = new Set();
+
+  let thumbnailObserver = 'IntersectionObserver' in window
+    ? new IntersectionObserver(entries => {
+        for (let entry of entries) {
+          if (entry.isIntersecting) visibleThumbnails.add(entry.target);
+          else visibleThumbnails.delete(entry.target);
+        }
+        reconcileThumbnails();
+      }, {rootMargin: '200px'})
+    : null;
+
+  function swapThumbnail(frame, live) {
+    let replacement = frame.cloneNode(false);
+    replacement.setAttribute('sandbox', live ? 'allow-scripts' : '');
+    replacement.dataset.scriptable = live ? 'live' : '';
+
+    // Visibility has to survive the swap. The observer re-reports the
+    // replacement asynchronously, and until it does, reconciliation would
+    // otherwise read a still-on-screen thumbnail as hidden — evicting it,
+    // freeing a slot, and re-upgrading it on the next callback forever.
+    let visible = visibleThumbnails.has(frame);
+    visibleThumbnails.delete(frame);
+    liveThumbnails.delete(frame);
+    if (thumbnailObserver) thumbnailObserver.unobserve(frame);
+
+    frame.replaceWith(replacement);
+
+    if (visible) visibleThumbnails.add(replacement);
+    if (live) liveThumbnails.add(replacement);
+    if (thumbnailObserver) thumbnailObserver.observe(replacement);
+  }
+
+  // Drop frames that have left the screen, then fill the free slots. Runs to a
+  // fixed point: swaps re-add their replacement to the sets they were in, so a
+  // reconcile pass never creates work for the next one.
+  function reconcileThumbnails() {
+    for (let frame of [...liveThumbnails]) {
+      if (!visibleThumbnails.has(frame)) swapThumbnail(frame, false);
+    }
+    for (let frame of visibleThumbnails) {
+      if (liveThumbnails.size >= MAX_LIVE_THUMBNAILS) break;
+      if (!liveThumbnails.has(frame)) swapThumbnail(frame, true);
+    }
+  }
+
+  function registerThumbnail(frame) {
+    if (thumbnailObserver) {
+      thumbnailObserver.observe(frame);
+    } else if (liveThumbnails.size < MAX_LIVE_THUMBNAILS) {
+      // No IntersectionObserver: upgrade the first screenful and leave the
+      // rest inert rather than letting an unbounded grid go live.
+      swapThumbnail(frame, true);
+    }
+  }
+
+  for (let frame of document.querySelectorAll('iframe[data-scriptable]')) {
+    registerThumbnail(frame);
+  }
+
   const GALLERY_PAGE_SIZE = 20;
 
   for (let row of document.querySelectorAll('.gallery-row')) {
@@ -177,7 +261,10 @@ addEventListener("DOMContentLoaded", () => {
       let a = document.createElement('a');
       a.href = `/inscription/${id}`;
       let iframe = document.createElement('iframe');
-      iframe.setAttribute('sandbox', 'allow-scripts');
+      // Inert to match the server-rendered thumbnails; registerThumbnail then
+      // upgrades it under the same cap once it scrolls into view.
+      iframe.dataset.scriptable = '';
+      iframe.setAttribute('sandbox', '');
       iframe.setAttribute('scrolling', 'no');
       iframe.setAttribute('loading', 'lazy');
       iframe.src = `/preview/${id}?thumb=1`;
@@ -206,10 +293,15 @@ addEventListener("DOMContentLoaded", () => {
         }
         let data = await response.json();
         let frag = document.createDocumentFragment();
+        let added = [];
         for (let id of (data.ids || [])) {
-          frag.appendChild(makeThumbnail(id));
+          let anchor = makeThumbnail(id);
+          added.push(anchor.querySelector('iframe'));
+          frag.appendChild(anchor);
         }
         track.appendChild(frag);
+        // Register after insertion — observing a detached node never fires.
+        for (let frame of added) registerThumbnail(frame);
         if (!data.more) exhausted = true;
         refreshState();
         applyPage();
